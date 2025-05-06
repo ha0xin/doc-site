@@ -1,0 +1,1255 @@
+# Stage 模拟器和 stage_ros 
+
+## Chapter 1: Stage 简介
+
+### 1.1 什么是 Stage？
+
+Stage 是一个机器人模拟器，它在一个二维位图环境中模拟移动机器人、传感器和对象的群体。它主要设计用于支持多智能体自治系统的研究。因此，Stage 提供了大量设备的相对简单、计算成本低廉的模型，而不是试图高保真地模拟任何特定设备。这种方法已被证明在研究中非常有效。
+
+Stage 是 Player 项目的一部分，该项目旨在创建用于机器人和传感器系统研究的自由软件。
+
+### 1.2 核心特性
+
+Stage 提供了三种主要的使用方式 ：
+
+1. **Stage 模拟器 (独立程序`stage`)** : 这是一个独立的、快速且可扩展的机器人模拟器。用户的机器人控制器在运行时编译和加载，并可以附加到任何模型上。控制器可以完全访问 Stage API。
+2. **Player/Stage (带有`libstageplugin`的 Player)** : Stage 通常作为 Player 的插件模块使用，为 Player 提供虚拟设备群体。用户编写机器人控制器和传感器算法作为 Player 服务器的“客户端”。通常情况下，客户端无法区分真实的机器人设备和它们在 Stage 中模拟的等价物（除非刻意尝试区分）。这种方式使得为真实机器人快速原型化控制器成为可能，因为在 Stage 中开发的 Player 客户端通常只需很少或无需修改即可在真实机器人上工作，反之亦然。
+3. **`libstage`**: Stage 也可以作为一个 C++ 库，在用户自己的程序中提供机器人仿真功能。如果 Player 不适合用户的需求，或者用户希望基于一个成熟的仿真引擎构建自定义仿真模型，那么这种方式非常有用。
+
+### 1.3 设计理念
+
+Stage 的设计特别考虑了多智能体系统，因此它侧重于提供大量设备的简单、计算开销小的模型，而不是追求对任何单个设备的高度保真模拟。这种设计旨在成为传统高保真机器人仿真、Jakobi 描述的最小化仿真以及人工生命研究中常见的网格世界仿真之间的一个实用折衷方案。其目标是使 Stage 足够逼真，以便用户可以将控制器在 Stage 机器人和真实机器人之间迁移，同时速度又足够快，能够模拟大规模群体。Stage 也力求对本科生易于理解，同时对专业研究人员来说又足够复杂和强大。
+
+### 1.4 许可证
+
+Stage 是自由软件，根据自由软件基金会发布的 GNU 通用公共许可证第 2 版 (GNU General Public License version 2) 的条款进行分发和修改。这意味着用户可以免费使用、分发和修改 Stage 的代码。文档则遵循 GNU 自由文档许可证 1.2。
+
+## Chapter 2: 历史与发展
+
+### 2.1 起源与 Player 项目
+
+Stage 的历史与 Player 项目紧密相连。Player 项目（前身为 Player/Stage 项目）创建自由开源软件，用于机器人学和传感器系统的研究。
+
+故事始于1998年秋，Brian Gerkey 和 Richard Vaughan 分别来到南加州大学 (USC)。当时，USC 的交互实验室 (Interaction Lab) 主要研究多机器人系统。Richard Vaughan 为个人使用编写了一个名为 Arena 的多机器人模拟器，最初机器人控制器直接编译到 Arena 代码中。实验室的 Pioneer 机器人运行的是 Barry Werger 开发的 Ayllu，这是一个基于 C 语言的类似 subsumption 架构的编程框架。
+
+Richard Vaughan 和 Brian Gerkey 都意识到需要改进机器人软件基础设施。Kasper Stoy 于1999年加入，并与 Richard Vaughan 一起在 Arena 中设计机器人控制器。此时，Richard Vaughan 为 Arena 编写了一个套接字接口，形成了经典的客户端-控制器/服务器-机器人模型。为了在真实机器人上运行他们在 Arena 中开发的代码，而不想将其移植到 Ayllu，他们开发了 ArenaServer。ArenaServer 在机器人上运行，并提供与 Arena 相同的套接字接口。
+
+随后，Brian Gerkey、Richard Vaughan 和 Kasper Stoy 共同构想了一个通用的机器人接口，它应该尽可能具有非规定性，提供套接字接口，并对用户隐藏硬件细节。Brian Gerkey 和 Kasper Stoy 为 Pioneer 机器人编写了一个新的服务器，并将其命名为 Golem，默认端口为 6665。
+
+### 2.2 关键开发者与里程碑
+
+2000年，Andrew Howard 来到 USC。大约在此时，为了一个好的引言（源自莎士比亚《皆大欢喜》中的“All the world's a stage;/ and all the men and women merely players”），Golem 和 Arena 被重新命名为 Player 和 Stage。Brian Gerkey 和 Richard Vaughan 在18小时内编写了“Most Valuable Player”。Andrew Howard 成为 Player 和 Stage 的核心开发者之一。Brian Gerkey、Andrew Howard 和 Richard Vaughan 设计了如今 Player 底层的接口/驱动程序抽象框架。[^player-history]
+
+[^player-history]: Player Project History, accessed May 6, 2025, https://playerproject.github.io/history/
+
+**关键里程碑包括：**
+
+* **2001年**: Player/Stage 源代码树迁移到 SourceForge，使其独立于 USC。Stage 从2001年12月到2008年3月至少被下载了 25,263 次。
+* **2002年**: Andrew Howard 和 Nate Koenig 开始开发 Gazebo，一个3D多机器人模拟器。Gazebo 最初是 Player 项目的一部分，直到2011年。
+* **2003年**: 发表了“On device abstractions”，首次清晰阐述了 Player 协议、接口和实现的分离。Player/Stage 项目在 ICAR'03 上正式发表。
+* **2008年**: Stage 2.5D 版本的开发旨在模拟具有简单高度属性的对象，但最初版本功能不完整，后续工作改进了碰撞检测并添加了可在z方向移动的夹持器。
+* **2010年**: Stage 3.2.1 和 Stage 4.0.0 发布。Stage 的代码仓库迁移到 GitHub。
+* **2012年**: Stage 4.1.1 发布。这是 PlayerProject 官方网站新闻中提及的 Stage 的最后一个主要版本更新。
+* **2017年**: Player 3.1.0 发布，网站迁移到 GitHub Pages。`rtv/Stage` 在 GitHub 上的最新维护版本 Stage-4.3 于2017年4月27日发布。
+
+Player 项目由一个国际机器人研究团队开发，并在世界各地的实验室中使用。
+
+## Chapter 3: 核心 Stage 用法：独立运行与 `libstage`
+
+Stage 提供了灵活的使用方式，既可以作为独立的模拟器运行，也可以作为 C++ 库集成到用户自己的应用程序中。
+
+### 3.1 独立可执行程序 `stage`
+
+Stage 提供了一个名为 `stage` 的可执行程序，允许用户在不依赖 Player 的情况下运行 Stage 仿真。在这种模式下，用户的机器人控制程序需要编译成一个动态链接库 (shared library)，然后在 `stage` 启动时加载该库。控制器可以直接访问 Stage API 来读取传感器数据和控制机器人模型。
+
+要运行独立 `stage` 程序，通常需要一个 `.world` 文件来定义仿真环境和机器人，以及一个包含控制器逻辑的库。例如，在早期的 Stage 版本中，可以通过 `src/stest worlds/simple.world robot1` 这样的命令来测试 Stage 是否工作正常，其中 `robot1` 可能指向一个预编译的或运行时加载的控制器。具体的命令行参数和控制器库的加载机制可以查阅 Stage 的详细文档。这种方式为那些希望专注于仿真本身或拥有自定义控制架构的用户提供了一个轻量级的选择。
+
+### 3.2 `libstage` C++ 库
+
+对于需要更深层次集成或自定义仿真功能的用户，Stage 提供了 `libstage`，一个 C++ 库。使用 `libstage`，开发者可以在自己的 C++ 程序中创建、运行和定制 Stage 仿真。这在 Player 系统不适用或需要基于 Stage 成熟的仿真引擎构建特定仿真模型时非常有用。`libstage` 提供了对仿真世界、模型、传感器和物理引擎的编程接口，允许用户以编程方式控制仿真的各个方面。Chapter 5 将更详细地介绍 `libstage` 的使用。
+
+### 3.3 安装 Stage
+
+Stage 的标准安装过程遵循 [GNU Autotools](https://en.wikipedia.org/wiki/GNU_Autotools) 的约定。
+
+1. **依赖**: 如果计划将 Stage 与 Player 一起使用，必须先确保 Player 已正确安装并工作。
+2. **下载源码**: 从官方源（历史上是 playerstage.sf.net ，后来是 GitHub）下载最新的 Stage 源码压缩包 (例如 `stage-src-<version>.tgz`)。
+3. **解压**: 使用 `tar xzvf stage-<version>.tgz` 解压源码包。
+4. **进入源码目录**: `cd stage-<version>`。
+5. **配置**: 运行 `./configure`。此步骤会检查系统依赖并设置编译选项。
+
+    * 可以使用 `--prefix` 选项指定安装目录，例如 `./configure --prefix=/home/user/my_stage_install`。通常，Stage 应与 Player 安装在相同的前缀下。
+    * 运行 `./configure --help` 可以查看所有可用的配置选项。
+6. **编译**: 运行 `make`。
+7. **测试 (可选但推荐)** : 运行 `src/stest worlds/simple.world robot1` (路径和参数可能因版本而异) 来测试编译是否成功。如果看到一个机器人在仿真窗口中运行，则表示构建成功。
+8. **安装**: 运行 `sudo make install` (如果安装到系统目录如 `/usr/local`，则需要 root 权限)。
+
+对于较新的、基于 CMake 的 Stage 分支 (如 `CodeFinder2/stage-simulator` )，安装步骤通常涉及：
+
+1. 安装依赖: `sudo apt install git cmake build-essential libfltk1.3-dev libltdl-dev libpng-dev libjpeg-dev` (以 Ubuntu 为例)。
+2. 克隆仓库: `git clone https://github.com/CodeFinder2/stage-simulator.git`。
+3. 创建构建目录并编译:
+
+    ```bash
+    cd stage-simulator
+    mkdir build && cd build
+    cmake..
+    make -j$(nproc)
+    ```
+
+    之后可能需要 `sudo make install`。
+
+### 3.4 传感器和执行器模型
+
+Stage 提供了多种传感器和执行器模型，这些模型旨在实现计算效率和模拟多智能体交互的需求，而不是追求单个设备的高保真度。可用的模型包括：
+
+* **测距传感器 (Rangers)** :
+
+  * 声纳 (Sonar)
+  * 红外测距仪 (Infrared rangers)
+  * 扫描激光测距仪 (Scanning laser rangefinder)，包括 SICK 和 Hokuyo 激光扫描器的模型
+* **视觉传感器 (Vision)** :
+
+  * 颜色斑点检测 (Color blob detection)
+  * 基准标记跟踪 (Fiducial tracking)
+  * 3D 深度图相机 (3D depth-map camera)
+* **接触传感器 (Contact Sensors)** :
+
+  * 碰撞传感器/缓冲器 (Bumpers)
+* **执行器 (Actuators)** :
+
+  * 夹持器 (Grippers)
+  * 差速驱动机器人底盘 (Differential steer robot base)
+* **定位 (Localization)** :
+
+  * 里程计 (Odometry)，带有漂移误差模型
+  * 全局定位 (Global localization)
+
+这些模型使得用户可以在仿真环境中测试各种常见的机器人感知和行动能力。
+
+## Chapter 4: Stage 世界文件 (`.world`)
+
+Stage 仿真环境的内容由一个文本文件定义，通常具有 `.world` 扩展名。这个文件描述了仿真世界中的所有元素，包括环境布局、障碍物、机器人及其传感器和执行器等。
+
+### 4.1 基本语法和结构
+
+`.world` 文件采用一种简单的文本格式，易于人类阅读和编辑。其设计目标之一就是降低创建和修改仿真世界的门槛，这与 Stage 整体的易用性理念相符。
+
+* **模型定义**: 世界文件主要由一系列模型定义组成。定义模型的基本语法是：
+
+  ```
+  define model_name model_type
+  (
+    # parameters
+    parameter1 value1
+    parameter2 value2
+   ...
+  )
+  ```
+
+  其中 `model_name` 是用户为该模型实例指定的唯一名称，`model_type` 是模型的类型（如 `position`, `floorplan`, `ranger` 等）。括号内是该模型类型特有的参数列表。
+* **注释**: 以 `#` 符号开头的行被视作注释，会被模拟器忽略。
+* **包含文件**: Stage 支持使用 `include` 指令来包含其他文件的内容，通常是 `.inc` 文件。语法为：
+
+  ```
+  include "filepath/filename.inc"
+  ```
+
+  这使得可以将复杂的仿真世界分解为模块化的组件，例如将通用的机器人定义、地图定义或传感器配置放在单独的 `.inc` 文件中，然后在主 `.world` 文件中引用它们。这种机制极大地提高了世界文件的可管理性和可重用性。
+
+这种基于文本和关键字的语法，结合 `include` 指令，使得用户可以方便地创建和组织即便是复杂的多机器人仿真场景。
+
+### 4.2 全局世界参数
+
+`.world` 文件可以定义一些影响整个仿真环境和模拟器行为的全局参数。这些参数让用户能够控制仿真的速度、更新频率和可视化细节，从而在不同应用场景（从快速批量仿真到详细的交互式实验）中取得平衡。
+
+* `resolution <float>`: 定义仿真世界中每个像素代表的物理尺寸，单位是米。这个参数影响了世界的粒度。
+* `interval_sim <int>`: 仿真更新步长，单位是毫秒。它直接影响仿真在内部运行的速度。
+* `interval_real <int>`: (可选) 实时更新步长，单位是毫秒。用于尝试将仿真与真实时间同步。
+* `gui_interval <int>`: GUI 界面的更新间隔，单位是毫秒。
+* **窗口参数 (可选)** : Stage 通常会自动创建一个显示窗口，但用户也可以在 `.world` 文件中指定窗口属性 ：
+
+  * `window (... )`: 定义窗口属性的块。
+  * `size [ <width_pixels> <height_pixels> ]`: 仿真窗口的尺寸，单位是像素。
+  * `scale <float>`: 每个像素显示的仿真环境的米数。该值越大，仿真场景在窗口中显得越小。
+  * `center [ <x_m> <y_m> ]`: 窗口中心的初始世界坐标。
+  * `rotate [ <roll_deg> <pitch_deg> ]`: 窗口视图的初始旋转 (通常2D仿真中主要关注围绕Z轴的旋转，但Stage有2.5D能力)。
+  * 其他与GUI相关的参数，如 `gui_nose` (是否显示模型朝向指示)、`gui_grid` (是否显示网格)、`gui_move` (是否允许鼠标拖动视图)、`gui_outline` (是否显示模型轮廓)，这些参数有时在全局窗口定义中设置，有时也可能在 `floorplan` 模型内部定义。
+
+### 4.3 定义环境：`floorplan` 模型
+
+`floorplan` 模型用于定义仿真世界的基础环境，如墙壁、障碍物等静态结构。它通常是构成仿真场景的第一个主要元素。很多情况下，`floorplan` 的定义会放在一个单独的 `.inc` 文件中（例如 `map.inc`），然后通过 `include` 指令加载到主 `.world` 文件。
+
+使用位图图像来定义2D环境是 Stage 的一个核心简化特性。用户可以在任何图像编辑软件中绘制地图（通常黑色代表障碍物，其他颜色代表可通过区域），然后将其导入 Stage。这种方式极大地降低了创建自定义环境的门槛，无需复杂的3D建模或程序化生成技术，符合 Stage 易于使用的设计目标。
+
+`floorplan` 模型的主要参数包括：
+
+* `bitmap "<image_file_path>"`: 指向一个位图文件的路径（支持 PNG, BMP, JPG, GIF 等格式）。图像中的黑色区域通常被解释为障碍物，非黑色区域则为可通行空间。
+* `map_resolution <float>`: 如果位图的分辨率与全局 `resolution` 参数不同，可以在此指定该地图特有的分辨率，单位是米/像素。
+* `size [ <width_m> <height_m> <depth_m> ]`: 地图在仿真世界中的物理尺寸，单位是米。`depth_m` 参数主要用于 Stage 的 2.5D 功能，表示地图的高度。
+* `name "<string>"`: 为该 `floorplan` 模型指定一个名称，例如 "mymap"。
+* `color "<color_name_or_rgb>"`: 用于在仿真窗口中渲染该地图的颜色。例如，`color "gray30"`。这通常不影响位图本身如何被解析为障碍物。
+* `boundary <0_or_1>`: 一个布尔值（0 或 1），用于激活或禁用地图周围的边界框。如果设置为 1，机器人将无法离开地图定义的区域。
+* `laser_return <0_or_1>`: 一个布尔值，指示该 `floorplan` 模型是否反射激光束。如果为 1，激光传感器可以探测到由该地图构成的障碍物。类似地，还有 `gripper_return` (是否可被夹持器交互) 和 `fiducial_return` (是否作为基准标记被识别) 等参数，这些对于传感器如何与环境交互至关重要。
+
+### 4.4 定义机器人：`position` 模型
+
+在 Stage 中，移动机器人通常通过 `position` 模型来定义。`position` 模型代表了一个可以在2D（或2.5D）空间中移动和旋转的物理实体。传感器（如激光、声纳）和执行器（如夹持器）通常作为 `position` 模型的子模型进行定义，从而形成一个层级结构。这种层级结构是仿真器中构建复杂实体的常见且直观的方式：基础的 `position` 模型定义了机器人的物理存在和运动学特性，而子模型则赋予其感知和行动能力。
+
+`position` 模型的主要参数包括：
+
+* `name "<string>"`: 为机器人模型指定的唯一名称，例如 "robot1" 或 "r0"。这个名称非常重要，因为它会在 Player 配置文件或 ROS 启动文件中被用来将控制器或接口附加到特定的模拟机器人上。
+* `pose [ <x_m> <y_m> <z_m> <rotation_deg> ]`: 机器人初始位姿。`<x_m>` 和 `<y_m>` 是初始的X、Y坐标（单位：米），`<z_m>` 是Z坐标（用于2.5D，通常为0），`<rotation_deg>` 是初始的偏航角（绕Z轴的旋转，单位：度）。
+* `size [ <width_m> <depth_m> <height_m> ]`: 机器人的物理尺寸，分别表示宽度（X轴）、深度（Y轴）和高度（Z轴），单位是米。
+* `block ( points <N> point[x y]... point[N-1][x y] z [min_z max_z] )`: 定义机器人形状的多边形。`<N>` 是多边形的顶点数，`point[i][x y]` 是每个顶点相对于机器人中心的局部坐标。`z [min_z max_z]` 定义了该形状在Z轴上的范围（用于2.5D）。机器人可以由多个 `block` 组成以形成更复杂的形状。
+* `color "<color_name_or_rgb>"`: 机器人在仿真视图中的显示颜色。例如 `color "blue"`。
+* `obstacle_return <0_or_1>`: (通常默认为1) 指示该机器人是否对其他机器人构成障碍物。
+* `ranger_return <0_or_1>`: 指示该机器人是否反射测距传感器（如声纳、激光）的信号。
+* 子模型: 可以在 `position` 模型定义内部嵌套定义传感器（如 `ranger`, `laser`, `blobfinder`）或执行器（如 `gripper`）模型。这些子模型会附着在父 `position` 模型上，并随其一起移动。
+
+例如，一个名为 "pioneer\_robot" 的 `position` 模型可能在其定义内部包含一个 `laser` 模型来模拟激光雷达，以及一个 `bumper` 模型来模拟碰撞传感器。
+
+### 4.5 定义传感器
+
+Stage 提供了多种传感器模型，允许用户为模拟机器人配备感知能力。这些模型的参数化设计旨在提供一定程度的真实感，同时保持较低的计算成本，这与 Stage 成为“足够逼真”的模拟器的目标一致。
+
+* **`ranger`模型 (用于声纳、红外、简单激光)**  : 这是一个通用的测距传感器模型。
+  * `sensor ( range [ <min_dist_m> <max_dist_m> ] fov <degrees> samples <count> )`: 定义传感器的核心特性。
+    * `range [min max]`: 传感器的最小和最大探测距离，单位是米。
+    * `fov`: 传感器的视场角，单位是度。
+    * `samples`: 在视场角内生成的读数（射线）数量。
+    * `size [ <width_m> <depth_m> <height_m> ]`: 传感器模型在仿真中的物理尺寸。
+    * `block (... )`: (可选) 定义传感器的可见形状。
+    * `color_rgba [ r g b a ]`: 传感器在GUI中的显示颜色及透明度。
+
+* **`laser`模型 (用于扫描激光测距仪)**  : 这是为模拟类似 SICK 或 Hokuyo 的扫描激光雷达而设计的更特定的模型。其参数通常比通用 `ranger` 更丰富，可能包括扫描频率、角分辨率等，但核心的 `range`, `fov`, `samples` 概念仍然适用。
+
+* **`blobfinder`模型 (用于颜色斑点检测相机)**  : 模拟一个可以检测特定颜色区域的相机。
+
+  * `colors_count <int>`: 该斑点检测器可以检测的不同颜色的数量。
+  * `colors [ "color_name1" "color_name2"... ]`: 一个字符串数组，列出可检测的颜色名称。这些名称通常对应于标准的 X11 颜色名称 (如 "red", "blue", "green")。
+  * `image [ <width_px> <height_px> ]`: 模拟相机的图像分辨率，单位是像素。
+  * `range <float>`: 相机能够检测到颜色的最大距离，单位是米。
+  * `fov <degrees>`: 相机的水平视场角。
+* **其他模型**:
+
+  * `bumper`: 模拟碰撞传感器。当其定义的形状与障碍物接触时触发。
+  * `gripper`: 模拟夹持器，可以用于拾取和放置特定类型的对象（在2.5D仿真中尤为有用）。
+  * `fiducial`: 模拟基准标记检测器，可以识别环境中特定模式的标记。
+
+这些传感器模型通常作为机器人 `position` 模型的子模型进行定义，从而附着在机器人上，并相对于机器人的位姿进行感知。例如，可以在一个 `position` 模型内部定义多个 `ranger` 传感器，分别指向不同方向，以模拟机器人周围的声纳阵列。Stage 还支持里程计漂移模型 ，这进一步增强了仿真的真实性。
+
+### 4.6 使用 `include` 实现模块化世界文件
+
+`include "<filepath>"` 指令是 Stage 世界文件格式中一个非常重要的特性，它允许用户将复杂的仿真世界分解成更小、更易于管理的部分。这种模块化方法对于组织大型仿真、重用组件以及协作开发至关重要。
+
+通过 `include`，用户可以将通用的定义（如标准机器人类型、地图布局、传感器阵列配置）保存在单独的文件中（通常使用 `.inc` 扩展名），然后在多个不同的 `.world` 文件中重用它们。例如：
+
+* 一个 `pioneer.inc` 文件可能包含一个 Pioneer 型机器人的完整 `position` 模型定义，包括其形状、尺寸、颜色以及附带的传感器。
+* 一个 `map.inc` 文件可能定义一个特定的实验室环境的 `floorplan` 模型。
+* 一个 `sensors.inc` 文件可能包含一组标准化的传感器配置，可以附加到不同类型的机器人上。
+
+在主 `.world` 文件中，只需使用 `include "pioneer.inc"` 或 `include "my_maps/lab_environment.inc"` 这样的语句，就可以将这些预定义的组件加载到当前仿真中。
+
+这种做法带来了几个好处：
+
+1. **可重用性**: 无需在每个 `.world` 文件中重复定义相同的机器人或环境。
+2. **可维护性**: 如果需要修改一个标准组件（例如，更新机器人的传感器参数），只需修改对应的 `.inc` 文件，所有包含该文件的仿真世界都会自动更新。
+3. **组织性**: 大型仿真世界可以被结构化地组织，使得 `.world` 文件本身更简洁，更易于理解和导航。
+4. **协作**: 不同的人可以分工合作，分别负责创建和维护不同的组件（如机器人模型、环境模型），然后通过 `include` 将它们集成起来。
+
+许多 Stage 的示例和教程都利用了 `include` 文件来提供常见的机器人模型（如 Pioneer）和环境元素。
+
+### 4.7 示例：一个简单的 `.world` 文件剖析
+
+下面是一个简单的 `.world` 文件示例，结合了前面讨论的各种元素，包括全局参数、窗口配置、一个直接定义的 `floorplan` 环境以及一个带 `ranger` 传感器的机器人。
+
+```
+# simple_example.world
+
+# 全局世界属性
+resolution 0.02       # 每个像素代表0.02米
+interval_sim 100      # 仿真更新间隔为100毫秒
+
+# 窗口配置 (可选)
+window
+(
+  size [ 700 600 ]     # 窗口大小为 700x600 像素
+  scale 0.03          # 显示比例，每个像素代表0.03米
+  center [ 0.0 0.0 ]  # 视图中心的世界坐标
+  rotate [ 0.0 0.0 ]  # 视图旋转 (2D中通常为0)
+  show_grid 1         # 显示网格
+)
+
+# 定义一个名为 'myroom' 的 floorplan 模型作为环境
+define myroom floorplan
+(
+  # 使用一个位图文件来定义障碍物
+  # 假设 'my_map_image.png' 在 'worlds' 子目录下
+  # 图像中的黑色部分将成为障碍物
+  bitmap "worlds/my_map_image.png"
+
+  # 地图的物理尺寸：20米宽, 15米长, 1米高 (高度用于2.5D)
+  size [ 20.0 15.0 1.0 ]
+
+  # 激活边界，机器人不能离开此区域
+  boundary 1
+
+  # 地图在GUI中的渲染颜色
+  color "gray60"
+
+  # 此地图会反射激光
+  laser_return 1
+)
+
+# 定义一个名为 'myrobot' 的 position 模型作为机器人
+define myrobot position
+(
+  # 机器人的唯一名称，用于Player/ROS中引用
+  name "robot0"
+
+  # 初始位姿: x=1.0m, y=1.0m, z=0.0m, yaw=0.0度
+  pose [ 1.0 1.0 0.0 0.0 ]
+
+  # 机器人的物理尺寸: 0.4m宽, 0.3m深, 0.2m高
+  size [ 0.4 0.3 0.2 ]
+
+  # 定义机器人的形状为一个矩形
+  # block 定义了一个多边形，这里是4个顶点
+  # point到point是相对于机器人中心的局部坐标
+  # z [0 0.2] 定义了形状在z轴上的范围
+  block
+  (
+    points 4
+    point[-0.2 -0.15]
+    point[0.2 -0.15]
+    point[0.2 0.15]
+    point[-0.2 0.15]
+    z [0 0.2]
+  )
+
+  # 机器人在GUI中的渲染颜色
+  color "blue"
+
+  # 将一个 ranger 传感器作为子模型附加到机器人上
+  ranger
+  (
+    # 传感器参数:
+    # 探测范围 0.1米 到 5.0米
+    # 视场角 90度
+    # 产生 18 个样本读数
+    sensor ( range [0.1 5.0] fov 90 samples 18 )
+
+    # 传感器本身的物理尺寸 (主要用于可视化)
+    size [ 0.05 0.05 0.05 ]
+
+    # 传感器在GUI中的渲染颜色
+    color "red"
+  )
+)
+```
+
+**文件剖析**:
+
+1. **全局参数**:
+
+    * `resolution 0.02`: 设置了仿真的基本空间精度。
+    * `interval_sim 100`: 控制了仿真逻辑的更新频率。
+2. **窗口配置 (`window`)** :
+
+    * `size [ 700 600 ]`: 定义了用户看到的仿真窗口的像素尺寸。
+    * `scale 0.03`: 将仿真世界中的米单位映射到窗口中的像素单位。
+    * `center` 和 `rotate`: 设置了初始的观察视角。
+    * `show_grid 1`: 在视图中显示网格，有助于观察。
+3. **环境定义 (`define myroom floorplan`)** :
+
+    * `bitmap "worlds/my_map_image.png"`: 这是创建环境形状的关键。模拟器会加载这个图像，并将其解释为障碍物布局。
+    * `size [ 20.0 15.0 1.0 ]`: 确定了该位图在仿真世界中所代表的实际物理空间大小。
+    * `boundary 1`: 防止机器人移出这个20x15米的区域。
+    * `color "gray60"`: 设定了地图在GUI中的视觉表现。
+    * `laser_return 1`: 确保如果机器人配备激光传感器，它们可以“看到”这个地图定义的墙壁。
+4. **机器人定义 (`define myrobot position`)** :
+
+    * `name "robot0"`: 为这个机器人实例赋予了一个唯一的标识符。
+    * `pose [ 1.0 1.0 0.0 0.0 ]`: 将机器人放置在世界的 (1,1) 位置，朝向正X轴方向。
+    * `size [ 0.4 0.3 0.2 ]`: 定义了机器人的大致包围盒。
+    * `block (... )`: 精确定义了机器人的物理形状，这对于碰撞检测很重要。
+    * `color "blue"`: 使机器人在视觉上易于区分。
+5. **传感器定义 (嵌套在`myrobot`内的`ranger`)** :
+
+    * 这个 `ranger` 模型被定义为 `myrobot` 的一部分，意味着它会附着在机器人上并随之移动。
+    * `sensor ( range [0.1 5.0] fov 90 samples 18 )`: 配置了一个前向的、具有特定探测能力（范围、视角、样本数）的测距传感器。机器人控制器将能够读取这个传感器的数据来感知前方的障碍物。
+    * `size` 和 `color` (在 `ranger` 内部): 主要用于在GUI中显示传感器本身。
+
+这个示例展示了如何通过组合不同的模型和参数来构建一个基本的、可运行的 Stage 仿真世界。通过修改位图文件、调整机器人和传感器的参数，或者添加更多的机器人和对象，可以轻松扩展这个基础。
+
+## Chapter 5: 使用 `libstage` - C++ API
+
+### 5.1 `libstage` 简介
+
+`libstage` 是 Stage 模拟器提供的核心 C++ 库，它允许开发者以编程方式创建、运行和自定义机器人仿真环境。当标准的 Player/Stage 接口或独立的 `stage` 可执行程序无法满足特定需求时，例如需要深度定制仿真逻辑、开发新的仿真模型或将仿真功能嵌入到更大的应用程序中，`libstage` 就显得尤为重要。
+
+通过 `libstage`，用户可以直接在 C++ 代码中控制仿真的每一个方面，包括加载世界文件、实例化机器人和传感器模型、运行仿真循环、读取传感器数据以及向机器人发送控制指令。这种底层的访问能力为高级用户和研究人员提供了极大的灵活性，使他们能够根据自己的研究需求扩展或修改模拟器的行为，或者将 Stage 的仿真引擎作为其定制工具的基础。
+
+### 5.2 使用 `libstage` 建立项目
+
+要在一个 C++ 项目中使用 `libstage`，需要正确配置构建系统以包含 Stage 的头文件并链接到 `libstage` 库。
+
+1. **包含头文件**: 在 C++源文件中，通常需要包含主 Stage 头文件，如 `#include <stage.hh>`，或者根据需要包含更具体的模型头文件。
+2. **链接库**: 在编译和链接阶段，必须告诉编译器链接 `libstage` 库。这通常通过向链接器传递 `-lstage` (或类似) 标志，并指定库文件的搜索路径 (例如 `-L/usr/local/lib`，如果 Stage 安装在该处)。
+
+**使用 CMake 管理构建**: 对于现代 C++ 项目，推荐使用 CMake 来管理构建过程。如果安装的 Stage 版本提供了 CMake 配置文件 (例如，一些社区维护的 Stage 分支，如 `CodeFinder2/Stage` ，就是 CMake 兼容的)，那么在 `CMakeLists.txt` 文件中集成 `libstage` 会相对简单。
+
+一个概念性的 `CMakeLists.txt` 文件片段可能如下所示：
+
+```cmake
+cmake_minimum_required(VERSION 3.10)
+project(MyStageApplication)
+
+# 设置C++标准 (可选, 但推荐)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# 查找Stage库
+# 假设Stage安装后提供了StageConfig.cmake或stage-config.cmake
+# find_package(Stage REQUIRED)
+# 或者，如果Stage没有提供标准的CMake包，可能需要手动指定头文件和库路径：
+# include_directories(/path/to/stage/include)
+# link_directories(/path/to/stage/lib)
+
+# 添加可执行文件
+add_executable(MyStageApplication main.cpp)
+
+# 链接Stage库
+# 如果使用find_package并且Stage定义了导入的目标：
+# target_link_libraries(MyStageApplication PRIVATE Stage::stage)
+# 如果手动指定，则：
+# target_link_libraries(MyStageApplication PRIVATE stage)
+# 可能还需要链接其他依赖库，如FLTK, PNG, JPEG等，具体取决于Stage的构建方式
+
+# 对于 CodeFinder2/stage-simulator [16] 这种作为库使用的版本，
+# 它可能期望你像这样链接：
+# find_package(stage-simulator REQUIRED)
+# target_link_libraries(MyStageApplication PRIVATE stage-simulator::stage-simulator)
+```
+
+确保 `libstage` 及其依赖项（如 FLTK 用于 GUI，libpng/libjpeg 用于图像加载）被正确找到和链接是成功构建基于 `libstage` 的应用程序的关键。用户需要查阅其安装的 Stage 版本的具体文档，了解推荐的构建系统配置方法。
+
+### 5.3 核心 API 概念和用法
+
+`libstage` API 允许通过 C++ 代码直接与仿真世界交互。一个典型的 `libstage` 应用程序会包含初始化、加载世界、运行仿真循环以及与模型交互等步骤。文献  中提供了一个基础的 `libstage` C++ 代码示例，揭示了其核心用法：
+
+1. **初始化`libstage`**:
+
+    * `Stg::World::Init( &argc, &argv )`: 这是使用 `libstage` 的第一步，用于初始化库本身。在较新的版本或者某些分支中，命名空间可能是 `Stg` 或者直接是全局的 `StgWorld`。
+2. **创建仿真世界对象**:
+
+    * `Stg::WorldGui world( width, height, "title" )`: 创建一个带有图形用户界面 (GUI) 的仿真世界。`width` 和 `height` 是窗口的像素尺寸，`"title"` 是窗口标题。如果不需要 GUI（例如进行批量仿真），可能会使用 `Stg::World` 基类。
+3. **加载世界文件**:
+
+    * `world.Load( "path/to/your/worldfile.world" )`: 从指定的 `.world` 文件加载仿真环境、机器人和对象。
+4. **获取模型指针**:
+
+    * `Stg::ModelPosition* robot = dynamic_cast[Stg::ModelPosition*](Stg::ModelPosition*)(world.GetModel( "robot_name_in_worldfile" ))`: 通过在 `.world` 文件中定义的名称（例如 "robot0"）来获取指向特定机器人模型 (`ModelPosition`) 的指针。需要进行类型转换，并检查指针是否有效。
+5. **订阅模型更新**:
+
+    * `robot->Subscribe()`: 这一步对于确保模型在仿真循环中得到更新是必要的。
+6. **启动仿真时钟**:
+
+    * `world.Start()`: 开始仿真，驱动仿真时间的流逝。
+7. **主仿真循环**:
+
+    * `while(!world.TestQuit() )`: 这是仿真的核心循环，会一直运行直到用户关闭 GUI 窗口或程序发出退出信号。
+    * `if( world.UpdateAll() )` \`，具体函数名可能因版本而异): 在每次循环中调用此函数来推进仿真状态。它通常会更新所有模型、传感器，并处理碰撞等。此函数可能返回一个布尔值，指示是否应该执行用户控制逻辑（例如，是否过了一个仿真步长）。
+8. **与模型交互 (读取传感器，发送命令)** :
+
+    * 在主循环的 `UpdateAll()` 或 `RealTimeUpdate()` 之后，用户代码可以访问机器人模型的传感器数据。例如，获取 `ModelRanger` 子模型并读取其距离数据。
+    * `robot->SetSpeed( forward_speed, side_speed, turn_speed )`: `，这可能是对`SetSpeed`的封装或一个较早的API) 向机器人模型发送速度指令，控制其运动。`forward\_speed`是前进速度，`side\_speed`是侧向速度（对于非完整约束机器人通常为0），`turn\_speed\` 是角速度。
+9. **清理**:
+
+    * 循环结束后，可能需要释放资源，例如 `delete robot;` (如果指针是通过 `new` 创建的，但 `GetModel` 通常返回内部指针，不需要手动 `delete`，除非 `libstage` 的内存管理另有规定)。程序退出时，`world` 对象析构时会清理其管理的资源。
+
+这种基于主循环的结构允许用户实现机器人的“感知-思考-行动” (sense-think-act) 循环。在每次迭代中，程序从 Stage 模型中查询传感器数据，根据这些数据做出决策，然后向机器人模型发出新的运动指令。更详细的 API 调用和类信息需要参考 `libstage` 的官方或社区维护的文档，例如 `rtv.github.io/Stage/`  或 `codedocs.xyz/CodeFinder2/Stage/`。
+
+### 5.4 基础 C++ 示例：使用 `libstage` 控制机器人
+
+以下 C++ 示例扩展了  中的概念，演示了如何使用 `libstage` 初始化一个仿真世界，加载一个在 `.world` 文件中定义的机器人，并在主循环中根据简单的传感器输入控制该机器人。
+
+**假设的`.world`文件 (`example.world`):**
+
+```
+# example.world
+resolution 0.02
+interval_sim 100
+
+define floorplan model
+(
+  size [10 10 1]
+  bitmap "bitmaps/simple_maze.png" # 假设有一个简单的迷宫图片
+)
+
+define myrobot position
+(
+  name "robot0"
+  pose [1 1 0 0]
+  size [0.4 0.4 0.2]
+  color "blue"
+
+  # 一个前向的测距传感器
+  ranger
+  (
+    name "front_ranger" # 给传感器一个名字以便在C++中获取
+    sensor (range [0.0 3.0] fov 30 samples 1)
+    pose [0.2 0 0 0] # 传感器安装在机器人前方0.2米处
+    color "red"
+  )
+)
+```
+
+**C++ 控制程序 (`main.cpp`):**
+
+```cpp
+#include <stage.hh> // 主要的 Stage 头文件
+
+// 一个简单的回调函数，用于处理 Stg::ModelPosition 的更新
+// 在这个例子中，我们直接在主循环中控制，所以这个回调可能不是必需的，
+// 但 Stage 的某些模型交互方式可能依赖于回调。
+// int PositionUpdateCallback(Stg::ModelPosition* model, void* userdata)
+// {
+//   // 用户可以在这里放置每次模型更新时执行的代码
+//   return 0; // 返回0表示继续
+// }
+
+int main(int argc, char* argv) {
+    // 1. 初始化 libstage
+    Stg::World::Init(&argc, &argv);
+
+    // 2. 创建一个带 GUI 的仿真世界
+    //    参数: 宽度(px), 高度(px), 窗口标题
+    Stg::WorldGui world(800, 700, "Libstage Example");
+
+    // 3. 加载.world 文件
+    if (!world.Load("example.world")) {
+        fprintf(stderr, "Failed to load world file: example.world\n");
+        return 1;
+    }
+
+    // 4. 获取机器人模型指针
+    //    "robot0" 是在 example.world 中定义的机器人名称
+    Stg::ModelPosition* robot = dynamic_cast<Stg::ModelPosition*>(world.GetModel("robot0"));
+    if (!robot) {
+        fprintf(stderr, "Failed to get robot model 'robot0'\n");
+        return 1;
+    }
+
+    // 获取附着在机器人上的测距传感器模型
+    // "front_ranger" 是在 example.world 中为 ranger 模型指定的名称
+    Stg::ModelRanger* ranger = dynamic_cast<Stg::ModelRanger*>(robot->GetChild("front_ranger"));
+    if (!ranger) {
+        fprintf(stderr, "Failed to get ranger model 'front_ranger' from robot0\n");
+        // 即使没有传感器，机器人仍然可以移动，所以这里不直接退出
+    }
+    
+    // 5. 订阅模型更新 (对于通过 GetModel 获取的模型，通常是自动处理的，
+    //    但显式调用 Subscribe 通常无害，并确保其被更新)
+    // robot->Subscribe(); // 根据 [8]，这可能是需要的
+    // if(ranger) ranger->Subscribe();
+
+    // 6. 启动仿真时钟
+    world.Start();
+
+    double forward_speed = 0.0;
+    double turn_speed = 0.0;
+    const double OBSTACLE_DISTANCE = 0.5; // 米
+    const double FORWARD_VELOCITY = 0.3;  // 米/秒
+    const double ROTATION_VELOCITY = 0.8; // 弧度/秒
+
+    // 7. 主仿真循环
+    while (!world.TestQuit()) {
+        // 更新仿真世界状态
+        world.UpdateAll(); // 或者 world.RealTimeUpdate() 如 [8]
+
+        if (robot) {
+            // 简单的避障逻辑
+            if (ranger) {
+                const std::vector<Stg::ModelRanger::Sensor>& sensors = ranger->GetSensors();
+                if (!sensors.empty() && sensors.range < OBSTACLE_DISTANCE) {
+                    // 前方有障碍物，停止前进并右转
+                    forward_speed = 0.0;
+                    turn_speed = -ROTATION_VELOCITY; // 负值为右转
+                } else {
+                    // 前方无障碍物，前进
+                    forward_speed = FORWARD_VELOCITY;
+                    turn_speed = 0.0;
+                }
+            } else {
+                // 没有传感器，就一直前进 (或者其他默认行为)
+                forward_speed = FORWARD_VELOCITY / 2.0; // 慢速前进
+                turn_speed = 0.0;
+            }
+            
+            // 8. 设置机器人速度
+            // SetSpeed(前进速度 m/s, 侧向速度 m/s, 转向速度 rad/s)
+            robot->SetSpeed(forward_speed, 0.0, turn_speed);
+        }
+
+        // 可以通过 world.SimTimeNow() 获取当前仿真时间 (ms)
+        // printf("SimTime: %.2f s\n", world.SimTimeNow() / 1000.0);
+
+        // 控制GUI更新频率 (如果需要)
+        // usleep(10000); // 例如，暂停10毫秒
+    }
+
+    // 9. 清理 (通常 Stg::World析构时会处理其拥有的模型)
+    // delete robot; // GetModel 返回的指针通常不应由用户 delete
+
+    fprintf(stdout, "Simulation finished.\n");
+    return 0;
+}
+```
+
+**编译 (假设使用 g++ 和`libstage`已正确安装):**
+
+```bash
+g++ main.cpp -o libstage_example $(pkg-config --cflags --libs stage)
+# 或者手动指定包含和链接路径，例如：
+# g++ main.cpp -o libstage_example -I/usr/local/include/stage-4.1 -L/usr/local/lib -lstage -lFLTK -lpng -ljpeg
+./libstage_example
+```
+
+(注意: `pkg-config stage` 可能不适用于所有 Stage 安装。具体的编译命令高度依赖于 `libstage` 的安装方式和版本。)
+
+这个示例程序会加载 `example.world`，控制名为 "robot0" 的机器人。如果机器人前方 `front_ranger` 传感器检测到的距离小于0.5米，机器人会右转；否则，它会前进。这是通过 `libstage` API 实现基本机器人控制的一个起点。
+
+**表 5.4.1: 常用`libstage`类和方法 (概念性)**
+
+此表为用户提供了一个理解 `libstage` API 主要组件及其交互方式的起点，提炼了类似  等示例中的关键元素，并结合了对典型仿真库功能的预期。实际可用的类和方法会因 Stage 版本和分支而有所不同，应参考具体版本的 API 文档。
+
+## Chapter 6: Stage 与 ROS 1 集成 (`stage_ros`)
+
+### 6.1 `stage_ros` 简介
+
+`stage_ros` 是一个 ROS (Robot Operating System) 功能包，它将 Stage 模拟器封装起来，使其能够在 ROS 生态系统中使用。该包的核心是一个名为 `stageros` 的 ROS 节点，它通过 `libstage`  在内部运行 Stage 仿真。`stageros` 节点会加载一个用户定义的 `.world` 文件来创建仿真环境，并将 Stage 模拟器的功能（如机器人运动控制、传感器数据）通过标准的 ROS 主题 (topics)、服务 (services) 和 TF 变换 (transforms) 暴露出来。
+
+`stage_ros` 包的源代码托管在 GitHub 上的 `ros-simulation/stage_ros` 仓库中。
+
+`stage_ros` 包充当了一个关键的桥梁，使得原本非 ROS 原生的 Stage 模拟器能够被 ROS 系统访问和使用。ROS 依赖于特定的通信基础设施（主题、服务、参数等）。`stageros` 节点  将 Stage 内部的状态和控制机制转换为这些 ROS 结构。这使得基于 ROS 的控制、导航和感知算法能够与模拟的 Stage 机器人进行交互，就如同它们是真实的、支持 ROS 的机器人一样。
+
+### 6.2 ROS 1 发行版安装（Kinetic, Melodic, Noetic）
+
+对于主流的 ROS 1 发行版，如 Kinetic Kame, Melodic Morenia, 和 Noetic Ninjemys，`stage_ros` 可以通过 `apt` 包管理器作为预编译的二进制包安装。这极大地简化了安装过程，用户通常不需要从源代码编译 Stage 或 `stage_ros`。
+
+通用安装命令格式为：`sudo apt install ros-<distro>-stage-ros`
+
+其中 `<distro>` 应替换为具体的 ROS 发行版名称（例如 `kinetic`, `melodic`, `noetic`）。
+
+`stage_ros` 包本身依赖于多个其他 ROS 包和系统库，包括：
+
+* `stage` (Stage 模拟器核心库)
+* `nav_msgs` (用于里程计等导航相关消息)
+* `sensor_msgs` (用于激光扫描、图像等传感器消息)
+* `geometry_msgs` (用于速度指令等几何消息)
+* `tf` (用于坐标系变换)
+* `std_srvs` (用于标准服务类型，如 `Empty`)
+* `rostest` (用于测试)
+* 系统库如 `FLTK` (用于GUI), `libjpeg`, `libpng` 等。
+
+在安装 `ros-<distro>-stage-ros` 时，`apt` 通常会自动处理这些依赖关系。
+
+对于非常旧的 ROS 发行版（如 Groovy），可能需要从源代码编译 `stage` 和 `stage_ros`，例如使用 `rosmake stage`。但这对于当前主流的 ROS 1 版本已不再是常规操作。
+
+### 6.3 运行 `stageros`：启动仿真
+
+启动 `stageros` 节点与启动其他任何 ROS 节点类似，遵循标准的 ROS 运行流程。
+
+1. **启动`roscore`**: 在运行任何 ROS 节点之前，必须先启动 ROS Master。在一个新的终端中执行：
+    ```bash
+    roscore
+    ```
+2. **运行`stageros`节点**: 在另一个终端中，使用 `rosrun` 命令来启动 `stageros` 节点，并指定要加载的 `.world` 文件：
+    `stage_ros` 包通常会自带一些示例世界文件。一个常见的例子是加载 `willow-erratic.world`：
+
+    ```bash
+    rosrun stage_ros stageros $(rospack find stage_ros)/world/willow-erratic.world
+    ```
+
+    这里的 `$(rospack find stage_ros)` 会自动解析为 `stage_ros` 包在文件系统中的路径。
+    有时，基础的 `stage` 包（作为 `stage_ros` 的依赖项安装）也可能包含示例世界，例如：
+
+    ```bash
+    rosrun stage_ros stageros $(rospack find stage)/worlds/pioneer_walle.world
+    ```
+
+    (注意，这里仍然使用 `stage_ros` 的 `stageros` 节点，但加载的是 `stage` 包中的世界文件。)
+
+成功启动后，通常会弹出一个 Stage 的 GUI 窗口，显示加载的仿真环境和机器人。`stageros` 节点会开始发布传感器数据，并准备接收控制指令。这种标准的 `rosrun` 调用方式体现了 `stageros` 与 ROS 运行时环境的无缝集成。
+
+### 6.4 关键 `stageros` 参数
+
+`stageros` 节点本身的 ROS 参数配置相对简单，大部分仿真世界的详细配置（如机器人模型、传感器特性、环境布局等）都通过 `.world` 文件进行。
+
+`stageros` 节点接受以下主要的命令行参数和 ROS 参数：
+
+* **`world`(命令行参数, 必需)** :
+  * 指定要加载的 Stage `.world` 文件的完整路径。这是启动 `stageros` 时最重要的输入，它定义了整个仿真场景。
+  * 示例: `$(rospack find stage_ros)/world/my_custom_world.world`
+*  **`-g`(命令行选项, 可选)** :
+  * 如果设置了此选项，Stage 将以“无头”(headless) 模式运行，即不显示图形用户界面 (GUI)。
+  * 这对于在没有显示器的服务器上运行仿真、进行自动化测试或希望最大化性能（因为渲染GUI会消耗资源）时非常有用。
+  * 示例: `rosrun stage_ros stageros -g $(rospack find stage_ros)/world/my_world.world`
+*  **`~base_watchdog_timeout`(ROS 参数, 可选)** :
+
+  * 类型: `double`
+  * 默认值: `0.2` (秒)
+  * 描述: 这是一个看门狗超时参数。如果 `stageros` 在此参数指定的时间段内没有收到针对机器人的速度指令 (通常是通过 `cmd_vel` 主题)，机器人将会停止运动。这是一种安全机制，防止机器人在失去控制信号后继续移动。
+  * 设置方法: 可以在启动 `stageros` 的 `.launch` 文件中设置，或者通过命令行使用 `_param:=value` 的语法（尽管对于 `rosrun` 来说，通常在 `rosparam set` 或 `.launch` 文件中设置更常见）。
+
+    ```xml
+    <node pkg="stage_ros" type="stageros" name="stageros_node" args="$(find my_package)/worlds/my_world.world">
+      <param name="base_watchdog_timeout" value="0.5"/>
+    </node>
+    ```
+
+### 6.5 理解 `stage_ros` 主题（发布和订阅）
+
+`stage_ros` 通过标准的 ROS 主题与 ROS 生态系统的其他部分进行通信。它订阅控制指令，并发布来自仿真环境的传感器数据和机器人状态信息。这种使用标准 ROS 接口和消息类型的做法，确保了 `stageros` 能够与现有的 ROS 工具（如 RViz）、导航栈（如 `move_base`）和感知算法（如 `gmapping`, `amcl`）平滑集成，这是其核心效用所在。
+
+**订阅的主题 (Subscribed Topics):**
+
+* `cmd_vel` ([http://docs.ros.org/en/api/geometry_msgs/html/msg/Twist.html](http://docs.ros.org/en/api/geometry_msgs/html/msg/Twist.html)):
+
+  * `stageros` 订阅此主题以接收控制机器人的速度指令。
+  * 消息包含线速度 (linear.x, linear.y, linear.z) 和角速度 (angular.x, angular.y, angular.z)。对于典型的2D差速驱动机器人，主要使用 `linear.x` (前进/后退速度) 和 `angular.z` (旋转速度)。
+  * **命名空间**: 如果 `.world` 文件中定义了多个机器人（`position` 模型），此主题将根据机器人在世界文件中的名称或索引进行命名空间化，例如 `robot_0/cmd_vel`, `robot_1/cmd_vel` 等。
+
+**发布的主题 (Published Topics):**
+
+* `odom` ([nav_msgs/Odometry](http://docs.ros.org/en/api/nav_msgs/html/msg/Odometry.html)):
+
+  * 发布模拟的里程计数据，包括机器人的位姿（位置和姿态）估计及其速度，这些数据基于机器人在仿真世界中的运动。
+  * 里程计数据会受到 `.world` 文件中为相应 `position` 模型设置的噪声参数的影响，从而可以模拟真实里程计的不确定性。
+  * **命名空间**: 多机器人情况下会添加前缀，如 `robot_0/odom`。
+* `base_scan` ([http://docs.ros.org/en/api/sensor_msgs/html/msg/LaserScan.html](http://docs.ros.org/en/api/sensor_msgs/html/msg/LaserScan.html)):
+
+  * 如果机器人在 `.world` 文件中配置了 `laser` 或兼容的 `ranger` 模型，`stageros` 会在此主题上发布激光扫描数据。
+  * 消息包含扫描角度范围、角度增量、扫描时间和每个扫描点的距离读数。
+  * **命名空间**: 多机器人情况下会添加前缀，如 `robot_0/base_scan`。
+* `base_pose_ground_truth` ([nav_msgs/Odometry](http://docs.ros.org/en/api/nav_msgs/html/msg/Odometry.html)):
+
+  * 发布机器人在仿真世界中的完美、无噪声、全局参考的真实位姿。
+  * 此数据主要用于算法测试、调试和性能评估（例如，比较 SLAM 算法的估计位姿与真实位姿），**不应该**用于实际的机器人控制回路，因为它在真实机器人上是不可用的。这种提供地面真实值的能力是仿真在机器人算法开发中的一个重要价值。
+  * **命名空间**: 多机器人情况下会添加前缀，如 `robot_0/base_pose_ground_truth`。
+* `image` ([sensor_msgs/Image](http://docs.ros.org/en/api/sensor_msgs/html/msg/Image.html)):
+
+  * 如果机器人在 `.world` 文件中配置了 `camera` 模型（或具有视觉输出的 `blobfinder` 等），`stageros` 会发布模拟的相机图像。
+  * **命名空间**: 通常为 `robot_N/camera_name/image_raw` 或类似结构。
+* `depth` ([sensor_msgs/Image](http://docs.ros.org/en/api/sensor_msgs/html/msg/Image.html)):
+
+  * 如果配置了具有深度感知能力的相机模型，则发布深度图像。
+  * **命名空间**: 通常为 `robot_N/camera_name/depth/image_raw` 或类似结构。
+* `camera_info` ([sensor_msgs/CameraInfo](http://docs.ros.org/en/api/sensor_msgs/html/msg/CameraInfo.html)):
+
+  * 发布与模拟相机相关的标定信息，如内参矩阵、畸变系数等。
+  * **命名空间**: 通常为 `robot_N/camera_name/camera_info`。
+* `/clock` ([rosgraph_msgs/Clock](http://docs.ros.org/en/api/rosgraph_msgs/html/msg/Clock.html)):
+
+  * 当 ROS 参数 `/use_sim_time` 设置为 `true` 时，`stageros`（像其他 ROS 模拟器一样）会发布仿真时间到 `/clock` 主题。这使得 ROS 系统中的所有节点都能使用统一的、由模拟器驱动的时间，而不是系统时钟。
+  * 文献  提到了关于 `/clock` 消息发布速率的问题，表明用户可能需要调整 `.world` 文件中的 `interval_sim` 来控制仿真时间的推进速度和 `/clock` 的发布频率。
+
+**命名空间处理**: 如上所述，当 `.world` 文件中存在多个 `position` 模型（即多个机器人）时，`stageros` 会自动为每个机器人相关的主题（包括订阅的和发布的）添加前缀，通常是 `robot_<i>/`，其中 `i` 是从0开始的索引，或者基于 `.world` 文件中为机器人指定的 `name` 属性。这确保了可以独立地控制和感知每个机器人。
+
+**表 6.5.1: 关键`stage_ros`主题**
+
+### 6.6 `stage_ros` 服务
+
+与主题相比，`stage_ros` 提供的 ROS 服务接口相对有限。主题主要用于连续的数据流（如传感器数据）和高频指令（如速度控制），而服务通常用于一次性的请求或状态更改。
+
+目前文献中明确提到的 `stage_ros` 服务是：
+
+* `/reset_positions` ([std_srvs/Empty](http://docs.ros.org/en/api/std_srvs/html/srv/Empty.html)):
+
+  * 当调用此服务时，仿真世界中的所有机器人（或特定机器人，取决于实现细节，但通常是所有）将被重置到它们在 `.world` 文件中定义的初始位姿。
+  * 请求和响应消息类型均为 `std_srvs/Empty`，意味着调用时不需要传递参数，服务执行后也不返回特定数据，仅表示操作完成。
+  * 此服务是在 `stage_ros` 版本 1.7.5 中添加的。
+  * 调用示例: `rosservice call /reset_positions "{}"`。
+
+其他服务在所提供的文献片段中没有被广泛记录，这表明 `stage_ros` 主要依赖主题进行交互。这种设计模式在 ROS 中很常见：流式数据和频繁命令通过主题处理，而偶发性请求或状态改变则通过服务实现。
+
+### 6.7 `stageros` 发布的 TF 变换
+
+`stageros` 节点负责发布一系列 TF (Transform Frame) 变换，这些变换对于在 ROS 中正确解释和使用传感器数据、机器人位姿以及进行导航至关重要。TF 系统维护了不同坐标系之间的关系。`stageros` 发布的 TF 树结构通常遵循 ROS 的标准约定（如 REP 105），这使得 RViz 等工具和导航包能够正确地可视化数据并将不同来源的信息整合到一致的参考系中。
+
+`stageros` 发布的主要 TF 变换包括 ：
+
+1. **`odom`→`base_footprint`**:
+
+    * 这个变换表示了机器人底盘投影 (`base_footprint`) 在里程计坐标系 (`odom`) 中的位姿。
+    * `odom` 坐标系是机器人运动的局部参考系，通常由里程计信息（在仿真中是模拟的里程计）更新。它会随着机器人的移动而漂移。
+2. **`base_footprint`→`base_link`**:
+
+    * `base_link` 通常是机器人模型的中心或主要参考点。
+    * 这个变换在很多情况下是一个静态的、零位移零旋转的恒等变换，用于将地面投影点 `base_footprint` 与机器人的三维主体 `base_link` 联系起来。在 Stage (一个2D/2.5D模拟器) 中，`base_footprint` 和 `base_link` 的关系可能更简单。
+3. **`base_link`→`base_laser`(或其他传感器坐标系，如`camera`)** :
+
+    * 这个变换定义了传感器（例如激光雷达 `base_laser` 或相机 `camera`）相对于机器人主体 (`base_link`) 的安装位置和姿态。
+    * 这是一个静态变换，由机器人的物理结构和传感器的安装方式决定，通常在 `.world` 文件中通过传感器模型的 `pose` 参数间接定义，或者由 `stageros` 根据 `.world` 文件中的模型层次结构计算得出。
+
+这种 `odom` → `base_footprint` → `base_link` → `sensor_frame` 的 TF 树结构是 ROS 导航中非常标准的配置。它允许将传感器数据（例如 `base_laser` 坐标系下的激光扫描）转换到 `base_link` 坐标系，再转换到 `odom` 坐标系，或者最终转换到全局的 `map` 坐标系（如果使用了 SLAM 或定位系统）。
+
+> [!TIP]
+> 
+> 文献中提到了一个关于 `stage_ros` 破坏 REP 105 的问题 (`#35 stage_ros breaks REP 105`)，这表明在某些版本或情况下，TF 的发布可能存在与标准不符或错误的地方。用户在使用时，特别是较旧版本，应留意 TF 树的正确性，并使用 `rosrun tf view_frames` 或 `rqt_tf_tree` 等工具进行检查。
+
+### 6.8 `stage_ros` 中的多机器人仿真（命名空间）
+
+Stage 本身就是为多智能体系统设计的 ，而 `stage_ros` 通过利用 ROS 的命名空间 (namespaces) 机制，将这一能力自然地扩展到了 ROS 环境中。
+
+当 `.world` 文件中定义了多个 `position` 模型（即多个机器人）时，`stageros` 会自动为每个机器人相关的 ROS 主题和服务添加前缀，通常是 `robot_<i>/`，其中 `i` 是一个从0开始的索引，或者是基于机器人在 `.world` 文件中定义的 `name` 属性。
+
+例如，如果有两个机器人在 `.world` 文件中分别被命名（或隐式索引）为 "robot0" 和 "robot1"，那么：
+
+* 控制第一个机器人的速度指令将发布到 `robot_0/cmd_vel`。
+* 第一个机器人的里程计数据将发布在 `robot_0/odom` 主题上。
+* 第二个机器人的激光扫描数据将发布在 `robot_1/base_scan` 主题上。 依此类推。
+
+这种命名空间机制是一种干净且标准的 ROS 方法，用于管理多个相同或相似的节点/实体，确保了可以对每个机器人进行独立的控制和感知。
+
+此外，还存在一些专门为简化大规模多机器人 Stage 仿真的 ROS 包，例如 `swarm_stage_ros`。该包旨在自动配置大规模机器人集群的仿真，支持同构和异构机器人以及不同的感知系统。它在其世界文件中使用 `include` 指令来模块化地加载地图、机器人定义和传感器配置，进一步体现了 Stage/`stage_ros` 在多机器人研究中的应用潜力。
+
+### 6.9 在 `stageros` 中使用 Stage 控制器
+
+Stage 模拟器支持一种称为“控制器”(controllers) 的机制。这些控制器是直接在 Stage 仿真器内部运行的代码片段，用于控制模拟的机器人，而不是通过外部的 ROS 主题进行控制。这意味着控制逻辑与仿真器紧密耦合。
+
+在某些特定情况下，使用内部 Stage 控制器可能具有优势，例如：
+
+* 需要极低延迟的控制回路，而 ROS 通信的开销可能成为瓶颈。
+* 模拟一些遗留的、非 ROS 的机器人控制器行为。
+* 进行纯粹的仿真内部行为研究，不涉及外部 ROS 节点的交互。
+
+ROS Wiki 上有关于何时以及如何使用 Stage 内部控制器的教程。
+
+然而，当 `stageros` 运行时，其主要目的是将 Stage 机器人暴露给外部的 ROS 控制。如果同时使用内部 Stage 控制器，可能会产生冲突或非预期行为。文献  中提到了一个相关问题 (`#32 stage_ros is incompatible with the "wander" stage controller`)，这表明 `stageros`（它期望通过 ROS 接口管理机器人）与内部 Stage 控制器（它会接管机器人的控制权）之间的交互可能并不总是无缝的。
+
+因此，在 `stage_ros` 环境下使用内部 Stage 控制器算是一个相对小众的功能，用户需要仔细评估其必要性，并注意潜在的兼容性问题。大多数情况下，通过 ROS 主题 (`cmd_vel`) 控制 `stageros` 中的机器人是更常见和推荐的做法。
+
+### 6.10 实践示例（单机器人、遥操作、RViz 可视化）
+
+与 `stage_ros` 的交互主要通过标准的 ROS 工具进行，如命令行界面和 RViz 可视化工具。一旦 `stageros` 节点运行起来，模拟的机器人和传感器就如同真实的 ROS 设备一样，允许用户利用丰富的 ROS 生态系统进行开发和调试。
+
+以下是一些常见的实践操作示例：
+
+1. **使用示例世界文件运行`stageros`**: 首先确保 `roscore` 正在运行。然后，在新的终端中启动 `stageros` 并加载一个示例世界文件，例如 `willow-erratic.world`，该文件通常随 `stage_ros` 包提供：
+
+    ```bash
+    rosrun stage_ros stageros $(rospack find stage_ros)/world/willow-erratic.world
+    ```
+
+    此时，Stage 的 GUI 窗口应该会弹出，显示仿真环境。
+2. **通过键盘遥操作机器人**: 为了能够通过键盘控制模拟机器人，需要安装并运行 `teleop_twist_keyboard` 包。
+
+    * 安装 (如果尚未安装，以 Kinetic 为例，其他发行版类似替换 `kinetic`):
+
+      ```bash
+      sudo apt-get install ros-kinetic-teleop-twist-keyboard
+      ```
+    * 运行 (在一个新的终端中，确保 `roscore` 和 `stageros` 已运行):
+
+      ```bash
+      rosrun teleop_twist_keyboard teleop_twist_keyboard.py cmd_vel:=/robot_0/cmd_vel
+      ```
+
+      注意 `cmd_vel:=/robot_0/cmd_vel` 部分是将 `teleop_twist_keyboard` 默认发布的 `cmd_vel` 主题重映射到 `stageros` 为第一个机器人（名为 `robot_0`，如果世界文件中只有一个机器人，可能不需要 `robot_0/` 前缀，直接用 `cmd_vel`）监听的速度指令主题。根据终端提示的按键（通常是 `u, i, o, j, k, l, m, ,,.` 等）即可控制机器人移动。
+3. **直接发布速度指令**: 也可以通过 `rostopic pub` 命令直接向机器人的 `cmd_vel` 主题发布速度指令。例如，让机器人以 0.1 m/s 的速度前进：
+
+    ```bash
+    rostopic pub -r 10 /robot_0/cmd_vel geometry_msgs/Twist '{linear: {x: 0.1, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}'
+    ```
+
+    `-r 10` 表示以 10 Hz 的频率持续发布该指令。
+4. **在 RViz 中可视化传感器数据和机器人状态**: RViz 是 ROS 中强大的3D可视化工具。`stage_ros` 包通常也提供一个预配置的 RViz 文件。
+
+    * 运行 RViz (在一个新的终端中):
+
+      ```bash
+      rosrun rviz rviz -d $(rospack find stage_ros)/rviz/stage.rviz
+      ```
+    * 在 RViz 中，可以添加以下类型的显示 (Displays) 来可视化仿真数据：
+      * **TF**: 显示坐标系变换树。
+      * **RobotModel**: 如果有 URDF 模型，可以显示机器人模型。对于 Stage，通常直接观察 TF 和形状。
+      * **LaserScan**: 显示来自 `base_scan` 主题的激光扫描数据。
+      * **Odometry**: 显示来自 `odom` 主题的里程计位姿。
+      * **Pose (from Odometry)** : 可以用来显示 `base_pose_ground_truth` 的真实位姿。
+      * **Map**: 如果运行了 SLAM 算法（如 `gmapping`）并发布了地图，可以在此显示。
+5. **重置机器人位置**: 如果需要将仿真中的机器人重置到其初始位置，可以调用 `reset_positions` 服务：
+
+这些示例展示了 `stage_ros` 如何与 ROS 的标准工具链集成，为用户提供了一个便捷的2D机器人仿真平台。
+
+### 6.11 `stage_ros` 的维护状态和已知问题
+
+`stage_ros` 作为连接 Stage 模拟器和 ROS 1 的桥梁，其维护状态和已知问题对于用户来说是重要的考虑因素。
+
+**维护状态**:
+
+* `stage_ros` 的主要代码仓库位于 GitHub 的 `ros-simulation/stage_ros`。
+* 根据 ROS Index 网站 (`index.ros.org`) 的信息，针对较早的 ROS 发行版（如 `lunar-devel`, `indigo-devel`），`stage_ros` 被标记为“UNMAINTAINED”（未维护）。例如，`lunar-devel` 分支的最后更新日期是2017年5月1日。
+* 尽管如此，`stage_ros` 仍然可以用于较新的 ROS 1 发行版，特别是 ROS Noetic Ninjemys。有证据表明它已为 Noetic 打包并可通过 `apt` 安装。这通常意味着社区或特定维护者仍在进行必要的更新以保持其与最新 ROS 1 版本的兼容性。
+* GitHub 仓库的 Issues 页面  显示了持续的用户活动，有用户在2021年甚至2023年提交新的问题报告。这表明该软件包仍有用户基础，但官方维护者对问题的响应和拉取请求的合并可能较慢。
+
+综合来看，虽然 `stage_ros` 在某些官方渠道可能被标记为未积极维护，但由于其在2D多机器人仿真领域的实用性，它通过社区的需求和努力在一定程度上得以延续，尤其是在 ROS Noetic 上。用户应该意识到，对于遇到的问题，可能需要更多地依赖社区支持或自行寻找解决方案。
+
+**已知问题和常见痛点**: 从 GitHub Issues 页面  和相关讨论中，可以归纳出一些用户在使用 `stage_ros` 时可能遇到的常见问题：
+
+* **TF 和坐标系问题**:
+
+  * TF 名称可能出现不规范的前缀，例如以 `/` 开头 (`#69`)。
+  * 激光扫描 (`LaserScan`) 消息中的 `frame_id` 可能不正确或与预期不符 (`#68`)。
+  * `stage_ros` 在某些情况下可能不完全符合 ROS REP 105（坐标系约定） (`#35`)。 这些问题可能导致在 RViz 中可视化数据或与其他 ROS 节点（如导航栈）集成时出现困难。
+* **仿真速度和时间同步**:
+
+  * 用户报告难以将传感器消息和 `/clock` 消息的发布频率提高到默认的 10Hz 以上。调整 `.world` 文件中的 `interval_sim` 是控制仿真速率的方法，但过高或过低的速率可能导致与 `nav2d` 等其他节点的时间同步问题。
+  * 在无头模式下运行时，仿真器加速和崩溃的问题 (`#55`)。
+* **内存泄漏**:
+
+  * 有报告指出 `stage` 或 `stage_ros` 可能存在内存泄漏，并可能导致段错误 (`#47`)。
+* **与内部 Stage 控制器的兼容性**:
+
+  * `stage_ros` 可能与某些 Stage 内部控制器（如 "wander" 控制器）不兼容 (`#32`)。
+* **传感器数据问题**:
+
+  * 激光雷达强度值可能被错误地裁剪 (`#31`, 已在1.8.0版本中修复)。
+  * 相机图像的发布位置可能不正确 (`#54`)。
+
+用户在使用 `stage_ros` 时，应特别注意其 `.world` 文件配置、TF 树的正确性以及仿真时间参数的设置。查阅最新的 GitHub Issues 和社区论坛（如 ROS Answers）获取特定问题的解决方案或变通方法可能会有所帮助。
+
+## Chapter 7: Stage 与 ROS 2 (`stage_ros2`)
+
+随着 ROS 生态系统逐渐向 ROS 2 过渡，社区中也出现了将 Stage 模拟器与 ROS 2 集成的需求和努力。
+
+### 7.1 `stage_ros2` 社区工作概述
+
+与 ROS 1 中的 `stage_ros` 不同，目前似乎没有一个由原始 `stage_ros` 维护者或 `ros-simulation` 组织官方主导的 `stage_ros2` 包。相反，Stage 的 ROS 2 支持主要来自于社区成员的独立工作和贡献。
+
+这些社区驱动的项目旨在创建一个 ROS 2 的桥梁，使得 Stage 模拟器能够在 ROS 2 环境下运行，并利用 ROS 2 的新特性（如改进的通信系统 DDS、组件化节点等）。这种由下而上的发展方式在开源项目中很常见，尤其是在核心项目支持减弱或技术栈发生重大转变时。
+
+### 7.2 可用的 `stage_ros2` 包和仓库
+
+由于是社区驱动，存在多个不同的 `stage_ros2` 实现或分支。用户在选择时需要评估其功能、维护活跃度以及与特定 ROS 2 发行版的兼容性。
+
+* **`tuw-robotics/stage_ros2`** :
+
+  * 这个仓库似乎是一个相对完整和活跃的 `stage_ros2` 实现。
+  * 它明确支持多机器人仿真，并提供了对单 TF 树和多 TF 树配置的控制。
+  * 该项目基于了早期的一些 ROS 2 移植工作。
+  * 其目标 ROS 2 发行版包括 Humble Hawksbill，并且有迹象表明正在努力支持更新的发行版如 Jazzy Jalisco。
+* **`Navifra-Sally/stage_ros2`** :
+
+  * 这个仓库是 `shengliangd/stage_ros2` 的一个分支 (fork)，并且在其文档中也提及了 `n0nzzz/stage_ros2`。
+  * 它提供了详细的安装和构建说明，包括如何先从源码编译安装 Stage 核心库。
+  * 启动命令示例表明它也试图提供与 ROS 1 `stageros` 类似的节点名称。
+* **其他潜在的仓库**:
+
+  * GitHub issue `#72` ("A plan to support ROS2")  在 `ros-simulation/stage_ros` 仓库中讨论了支持 ROS 2 的计划，这可能指向其他相关工作或讨论。
+
+这种实现上的多样性意味着用户需要根据自己的具体需求（例如，特定的 ROS 2 版本、对多机器人 TF 配置的需求）来选择最合适的 `stage_ros2` 包。
+
+### 7.3 安装和构建过程
+
+由于 `stage_ros2` 主要由社区维护并且存在多个版本，通过预编译的二进制包进行安装的可能性较低。因此，用户通常需要从源代码编译和安装 `stage_ros2` 及其依赖。
+
+以下是一个通用的安装和构建流程，参考了 `Navifra-Sally/stage_ros2`  和对 `tuw-robotics/stage_ros2`  的推断：
+
+1. **安装 Stage 核心库 ( prerequisite )** :`stage_ros2` 依赖于 Stage 模拟器本身。用户需要先从源代码编译和安装 Stage。常用的 Stage 源码仓库是 `rtv/Stage` 或其分支如 `CodeFinder2/Stage`。 以 `rtv/Stage` (或兼容分支) 为例，使用 CMake 构建：
+
+    ```bash
+    git clone https://github.com/rtv/Stage.git ~/Stage # 克隆 Stage 源码
+    cd ~/Stage
+    mkdir build && cd build
+    cmake..
+    make -j$(nproc)
+    sudo make install # 安装到系统路径，如 /usr/local
+    ```
+
+    确保 Stage 库（如 `libstage.so`）和头文件被安装到系统可以找到的位置。
+2. **创建 ROS 2 工作空间并克隆`stage_ros2`包**: 如果还没有 ROS 2 工作空间，创建一个：
+
+    ```bash
+    mkdir -p ~/ros2_ws/src
+    cd ~/ros2_ws/src
+    ```
+
+    克隆选定的 `stage_ros2` 仓库。例如，克隆 `tuw-robotics/stage_ros2`：
+
+
+    ```bash
+    git clone https://github.com/tuw-robotics/stage_ros2.git
+    ```
+
+    或者，根据  的说明，克隆 `n0nzzz/stage_ros2` (可能是 `Navifra-Sally/stage_ros2` 的一个依赖或前身)：
+
+
+    ```bash
+    git clone https://github.com/n0nzzz/stage_ros2.git
+    ```
+3. **安装依赖**: 在编译之前，确保所有 ROS 2 依赖项都已安装。这通常包括：
+
+    * `rclcpp` (ROS 2 C++ 客户端库)
+    * 标准消息类型: `geometry_msgs`, `nav_msgs`, `sensor_msgs`, `std_srvs`
+    * TF2 相关包: `tf2`, `tf2_ros`
+    * 构建工具: `colcon-common-extensions`可以使用 `rosdep` 来安装缺失的依赖：
+4. **使用`colcon`构建工作空间**: 返回工作空间的根目录并执行构建命令：
+
+    ```bash
+    cd ~/ros2_ws
+    colcon build --symlink-install
+    ```
+
+    `--symlink-install` 是可选的，但有助于在修改 Python 脚本等文件后无需重新构建即可生效。
+5. **Source 工作空间**: 构建完成后，source 工作空间的安装设置脚本，以便 ROS 2 环境能够找到新构建的包：
+
+这个过程表明，与 ROS 1 中通常可以直接 `apt install` 不同，使用 `stage_ros2` 目前更偏向于从源码构建。
+
+### 7.4 关键特性和基本用法
+
+`stage_ros2` 的各个社区版本旨在将 Stage 模拟器的核心功能引入 ROS 2 环境，并尽可能提供与 ROS 1 版本 (`stage_ros`) 相似的用户体验和功能集。
+
+以 `tuw-robotics/stage_ros2`  为例，其关键特性和基本用法包括：
+
+* **可执行节点名称**: 虽然  的示例中使用了 `ros2 run stage_ros stageros...`，暗示节点名可能仍为 `stageros`，但具体的 ROS 2 实现可能会使用不同的节点名，例如 `stageros2_node` 或在启动文件中指定。需要查阅特定 `stage_ros2` 包的文档或启动文件来确认。
+* **通过启动文件运行**: ROS 2 推荐使用启动文件（通常是 Python 脚本）来配置和运行节点。`tuw-robotics/stage_ros2` 提供了 `.launch.py` 文件：
+
+  ```bash
+  ros2 launch stage_ros2 stage.launch.py world:=<world_name_without_extension>
+  # 例如: ros2 launch stage_ros2 stage.launch.py world:=cave
+  ```
+
+  `<world_name_without_extension>` 通常指在包的 `worlds` 目录下不带 `.world` 后缀的世界文件名。
+* **多机器人支持与 TF 配置**: 该包明确支持多机器人仿真，并提供了对 TF 树结构的灵活配置 ：
+
+  * `one_tf_tree:=true/false`: 这是一个启动参数，用于指定是为所有机器人使用一个统一的 TF 树 (`true`)，还是为每个机器人创建独立的 TF 树 (`false`)。
+  * `enforce_prefixes:=true/false`: 控制是否为机器人相关的节点、主题、服务和 TF 帧强制添加命名空间前缀。
+* **ROS 2 接口**:
+
+  * **主题 (Topics)** : 预计会提供与 `stage_ros` 类似的 ROS 主题，但使用 ROS 2 的消息类型和 QoS (Quality of Service) 配置。例如：
+
+    * 订阅 `cmd_vel` ([https://docs.ros2.org/foxy/api/geometry_msgs/msg/Twist.html](https://docs.ros2.org/foxy/api/geometry_msgs/msg/Twist.html)) 用于机器人控制。
+    * 发布 `odom` ([nav_msgs/msg/Odometry](https://docs.ros2.org/foxy/api/nav_msgs/msg/Odometry.html))、`scan` ([https://docs.ros2.org/foxy/api/sensor_msgs/msg/LaserScan.html](https://docs.ros2.org/foxy/api/sensor_msgs/msg/LaserScan.html))、`ground_truth` (可能仍为 `nav_msgs/msg/Odometry`) 等。
+    * 相机相关的图像和信息主题。
+    * `/clock` ([rosgraph_msgs/msg/Clock](https://docs.ros2.org/foxy/api/rosgraph_msgs/msg/Clock.html))。
+  * **服务 (Services)** : 可能会提供类似 `/reset_positions` 的服务，使用 ROS 2 的服务类型 (例如 `std_srvs/srv/Empty`)。
+  * **TF 变换**: 使用 `tf2` 库发布坐标系变换，结构上应与 ROS 1 版本类似（`odom` → `base_footprint` → `base_link` → `sensor_frame`）。
+
+核心的仿真逻辑仍然依赖于 Stage 的 `.world` 文件格式来定义环境、机器人和传感器。`stage_ros2` 的主要作用是将这些 Stage 内部的元素桥接到 ROS 2 的通信和坐标系统。社区版本的努力方向通常是实现与 ROS 1 版本的功能对等，同时利用 ROS 2 的新特性。
+
+### 7.5 当前状态和开发进展
+
+Stage 与 ROS 2 的集成 (`stage_ros2`) 仍然是一个动态发展的领域，主要由社区贡献者推动。其状态和开发进展因不同的分支和实现而异。
+
+* **活跃度不一**:
+
+  * 一些 `stage_ros2` 的分支可能比其他分支更活跃。例如，`tuw-robotics/stage_ros2`  的提交历史显示其在2023年仍在进行更新，并努力支持较新的 ROS 2 发行版，如为 Jazzy Jalisco 修复编译器问题（提交时间为“11个月前”，相对于2024年中期而言）。
+  * 其他分支，如 `Navifra-Sally/stage_ros2` ，可能基于更早期的移植工作，其最近的更新频率需要具体查看其 GitHub 仓库。
+* **社区驱动**: 由于缺乏一个统一的、官方支持的 `stage_ros2` 版本，用户需要依赖社区的努力。这意味着：
+
+  * **功能完整性**: 不同版本的 `stage_ros2` 在功能支持上可能存在差异。
+  * **稳定性**: 某些版本可能比其他版本更稳定或经过更充分的测试。
+  * **文档**: 文档的质量和完整性也可能参差不齐。
+* **选择和评估**: 用户在选择 `stage_ros2` 包时，应考虑以下因素：
+
+  * **ROS 2 发行版兼容性**: 确认所选包支持用户正在使用的 ROS 2 版本（例如 Foxy, Galactic, Humble, Iron, Jazzy）。
+  * **功能需求**: 是否支持多机器人、特定的 TF 配置、所有必要的传感器接口等。
+  * **社区活跃度**: 查看 GitHub 仓库的提交历史、Issue 跟踪、Pull Request 情况，以判断项目的维护状态和社区响应速度。
+  * **文档和示例**: 是否提供清晰的安装说明、使用教程和示例代码。
+* **未来展望**:`stage_ros2` 的未来发展在很大程度上取决于社区的持续投入。随着 ROS 2 的普及，对可靠的 Stage 集成的需求可能会促使现有分支的进一步完善，或者可能出现新的、更集中的开发努力。
+
+总而言之，`stage_ros2` 的生态系统正在逐步形成。虽然不像 ROS 1 中的 `stage_ros` 那样成熟和标准化，但已有可用的选项，并且一些分支显示出积极的开发迹象。用户需要进行一定的调研，并可能需要参与到社区中（例如，报告问题、贡献代码）以获得最佳体验。
+
+## Chapter 8: 高级主题和最佳实践
+
+### 8.1 创建自定义机器人和传感器模型（在 `.world` 文件中）
+
+Stage 的 `.world` 文件格式提供了足够的灵活性来定义各种自定义的机器人和传感器模型。核心语法是 `define <model_name> <model_type> (...parameters... )`。
+
+**自定义机器人形状**:
+
+* 使用 `position` 模型作为基础。
+* 通过一个或多个 `block` 定义来构建机器人的物理形状。每个 `block` 都是一个2D多边形（在Z轴上有一定厚度，用于2.5D）。
+
+  ```
+  define my_custom_robot position
+  (
+    name "custom_bot"
+    pose [0 0 0 0]
+    size [0.5 0.5 0.3] # 整体包围盒
+    color "purple"
+  
+    # 第一个形状块 (例如，主体)
+    block ( points 4 point[-0.2 -0.2] point[0.2 -0.2] point[0.2 0.2] point[-0.2 0.2] z [0 0.2] )
+    # 第二个形状块 (例如，一个突出的部分)
+    block ( points 3 point[0.2 0.0] point[0.3 0.05] point[0.3 -0.05] z [0.05 0.15] )
+  )
+  ```
+
+**组合传感器**: 传感器模型（如 `ranger`, `laser`, `blobfinder`, `camera`）通常作为机器人 `position` 模型的子模型进行定义。这意味着它们会附着在机器人上，并相对于机器人的局部坐标系定位。
+
+```
+define my_sensor_robot position
+(
+  name "sensor_heavy_bot"
+  #... 其他 position 参数...
+
+  # 前向激光雷达
+  laser
+  (
+    name "front_laser"
+    pose [0.2 0 0.1 0] # 安装在机器人前方0.2m，高度0.1m
+    sensor ( range [0.1 10.0] fov 180 samples 360 )
+    color "green"
+  )
+
+  # 两个侧向声纳
+  ranger
+  (
+    name "left_sonar"
+    pose [0.0 0.15 0.05 90] # 安装在左侧，朝向左方 (旋转90度)
+    sensor ( range [0.05 3.0] fov 30 samples 1 )
+    color "orange"
+  )
+  ranger
+  (
+    name "right_sonar"
+    pose [0.0 -0.15 0.05 -90] # 安装在右侧，朝向右方 (旋转-90度)
+    sensor ( range [0.05 3.0] fov 30 samples 1 )
+    color "orange"
+  )
+
+  # 一个颜色检测相机
+  blobfinder
+  (
+    name "main_camera"
+    pose [0.15 0 0.18 0] # 安装在前方偏上位置
+    colors_count 2
+    colors [ "red" "green" ]
+    image [ 320 240 ] # 图像分辨率
+    range 5.0         # 最大检测距离
+    fov 60            # 视场角
+  )
+)
+```
+
+通过精心调整子模型的 `pose` 参数（相对于父 `position` 模型），可以精确控制传感器在机器人上的布局。详细的模型参数请参考附录 A。
+
+### 8.2 调试 Stage 仿真
+
+调试 Stage 仿真通常涉及检查 `.world` 文件配置、观察仿真行为以及（如果使用 ROS）利用 ROS 的调试工具。
+
+* **Stage GUI**:
+
+  * **视觉检查**: GUI 是最直接的调试工具。观察机器人的运动、传感器范围的显示（如果启用）以及与环境的交互。
+  * **显示轨迹 (Trails)** : 很多 Stage 版本允许显示机器人的运动轨迹（例如，在 Player/Stage 的旧版教程中提到 View->Show trails ），这有助于分析机器人的路径规划和运动控制是否符合预期。
+  * **模型属性**: GUI 可能提供查看选中模型属性的功能。
+  * **控制仿真速度**: 减慢仿真速度（通过调整 `.world` 文件中的 `interval_sim` 或 GUI 控件）有助于观察快速发生的事件。
+* **ROS 工具 (当使用`stage_ros`或`stage_ros2`时)** :
+
+  * `rostopic echo <topic_name>`: 实时查看特定主题上发布的消息内容。例如，`rostopic echo /robot_0/odom` 可以检查里程计数据，`rostopic echo /robot_0/base_scan` 可以查看激光雷达数据。
+  * `rviz` / `rviz2`: 强大的3D可视化工具。可以显示 TF 树、机器人模型（如果提供 URDF）、传感器数据（LaserScan, PointCloud, Image, CameraInfo）、Odometry 路径、Markers 等。这是调试感知和导航问题的核心工具。
+  * `rosnode info <node_name>`: 查看节点（如 `stageros`）的发布/订阅信息、连接等。
+  * `rqt_plot`: 绘制主题数据的实时曲线图，例如绘制机器人的速度或传感器读数随时间的变化。
+  * `rqt_tf_tree` / `rosrun tf view_frames`: 可视化当前的 TF 树，检查坐标系之间的连接是否正确。
+  * `tf_echo <source_frame> <target_frame>`: 查看两个特定坐标系之间的实时变换。
+* **检查控制台输出**: 运行 `stage` (独立模式) 或 `stageros` (ROS 模式) 时，注意观察终端的输出。Stage 通常会打印关于加载 `.world` 文件、模型定义、潜在错误或警告的信息。
+* **简化问题**:
+
+  * **最小化`.world`文件**: 如果遇到复杂问题，尝试创建一个只包含最少元素的 `.world` 文件（例如，只有一个机器人和一个简单的环境），逐步添加组件以定位问题来源。
+  * **隔离控制器逻辑**: 如果问题可能出在机器人控制器代码中，先用简单的控制指令（如 `rostopic pub` 或一个极简的控制脚本）测试仿真环境是否按预期工作。
+* **日志记录**: 在机器人控制器代码中添加详细的日志记录，输出关键变量、决策过程和接收到的传感器数据，有助于追踪逻辑错误。
+
+### 8.3 性能优化技巧
+
+Stage 的设计初衷之一就是提供计算开销较低的仿真 ，但对于大规模或复杂的仿真，性能仍然是一个需要考虑的因素。
+
+* **无头模式 (Headless Mode)** :
+
+  * 如果不需要实时可视化（例如，进行批量实验、参数扫描或在无显示器的服务器上运行），以无头模式运行 Stage 可以显著提高性能，因为渲染 GUI 会消耗大量计算资源。
+  * 对于 `stageros`，可以使用 `-g` 命令行选项。
+  * 对于 Player/Stage 系统，可以在 Player 配置文件中设置 `usegui 0`。
+* **调整仿真间隔 (`interval_sim`)** :
+
+  * `.world` 文件中的 `interval_sim` 参数控制仿真逻辑的更新频率。较小的值意味着每秒更新次数更多，仿真更平滑，但实际运行时间因子会降低（即仿真时间相对于真实时间的流逝更慢）。较大的值会减少计算负担，但可能导致仿真不够精确或响应迟钝。
+  * 需要根据具体需求权衡。文献  讨论了当 `stage_ros` 与 `nav2d` 等节点一起使用时，修改此参数可能引发的问题，表明需要谨慎调整。
+* **简化`.world`文件**:
+
+  * **位图复杂度**: 用于 `floorplan` 的位图图像如果过于复杂或分辨率过高，可能会增加加载时间和碰撞检测的负担。尽量使用简洁、清晰的位图。
+  * **模型数量和细节**: 大量高细节（例如，由许多 `block` 组成）的模型会增加计算量。如果可能，使用更简单的几何形状。
+  * **传感器配置**: 传感器（尤其是 `ranger` 和 `laser`）的 `samples` 数量直接影响每次更新需要进行的射线投射次数。减少不必要的样本数可以提高性能。
+* **利用 Stage 的设计哲学**: Stage 本身就倾向于使用计算成本较低的模型。在自定义模型或选择参数时，应尽量遵循这一原则，避免引入不必要的高保真度计算。
+* **硬件资源**: 虽然 Stage 相对轻量，但 CPU 速度和内存仍然会影响复杂仿真的性能。
+* **关闭不必要的 GUI 特性**: 如果 Stage GUI 提供了关闭某些可视化特性（如轨迹、传感器范围显示等）的选项，在不需要时关闭它们可能有助于略微提升性能。
+
+通过综合运用这些技巧，可以在满足仿真需求的前提下，尽可能地提高 Stage 的运行效率。
+
+### 8.4 常见问题故障排除
+
+在使用 Stage 和 `stage_ros` 时，用户可能会遇到一些常见问题。以下是一些典型问题及其排查思路：
+
+* **`stage_ros`相关问题** :
+
+  * **TF 问题 (坐标系名称错误、`/`前缀问题、不符合 REP 105)** :
+
+    * **症状**: RViz 中模型显示不正确、传感器数据无法正确变换、导航栈报错。
+    * **排查**:
+
+      * 仔细检查 `.world` 文件中机器人和传感器模型的 `name` 属性，确保它们是有效的 ROS TF帧名称（不含非法字符，避免以 `/` 开头）。
+      * 使用 `rosrun tf view_frames` 或 `rqt_tf_tree` 检查实际发布的 TF 树结构是否符合预期（`odom` → `base_footprint` → `base_link` → `sensor_frame`）。
+      * 使用 `tf_echo <source_frame> <target_frame>` 检查特定变换是否发布以及是否正确。
+      * 确认 `stageros` 发布的 `frame_id` 与传感器消息中的 `header.frame_id` 是否一致且正确。
+  * **LaserScan`frame_id`问题**:
+
+    * **症状**: 激光扫描数据在 RViz 中显示位置错误或无法变换到目标坐标系。
+    * **排查**: 确保 `.world` 文件中激光雷达模型的 `pose` 是相对于其父 `position` 模型（即 `base_link`）正确设置的，并且 `stageros` 将其正确转换为 `base_link` → `base_laser` 的 TF。检查 `LaserScan` 消息中的 `header.frame_id` 是否为 `base_laser` (或等效名称)。
+  * **仿真速度/频率问题** :
+
+    * **症状**: `/clock` 更新缓慢、传感器数据发布频率低于预期、与其他 ROS 节点时间不同步。
+    * **排查**:
+
+      * 调整 `.world` 文件中的 `interval_sim` 参数。减小该值会提高仿真更新频率，但可能使仿真运行变慢（相对于真实时间）。
+      * 确保 ROS 参数 `/use_sim_time` 设置为 `true`，以便所有节点使用 `/clock` 主题的仿真时间。
+      * 检查是否有其他计算密集型节点拖慢了整个 ROS 系统的执行。
+    * **内存泄漏** :
+
+      * **症状**: 长时间运行仿真后，系统内存占用持续增加，最终可能导致 `stageros` 或系统崩溃。
+      * **排查**: 这是一个较难解决的问题。尝试更新到最新可用版本的 `stage` 和 `stage_ros`，或者查找社区中是否有相关的补丁或修复方案。如果可能，分段运行长时间仿真。
+  *  **`.world`文件错误**:
+
+    * **症状**: `stage` 或 `stageros` 启动失败，控制台报错指示无法加载世界文件或模型定义错误。
+    * **排查**:
+
+      * **语法错误**: 仔细检查 `.world` 文件的语法，如括号是否匹配、参数名称是否正确、值类型是否符合要求。
+      * **模型类型错误**: 确保 `define` 语句中的模型类型（如 `position`, `floorplan`, `ranger`）是 Stage 支持的。
+      * **文件路径错误**: 检查 `bitmap` 或 `include` 指令中的文件路径是否正确，并且文件确实存在于指定位置。路径通常相对于 `.world` 文件本身，或者需要使用绝对路径。
+      * **名称冲突**: 确保在 `.world` 文件中定义的模型名称（`name` 属性）是唯一的。
+  * **控制器逻辑问题**:
+
+    * **症状**: 机器人行为不符合预期（例如，不移动、撞墙、原地打转）。
+    * **排查**:
+
+      * **传感器数据**: 使用 `rostopic echo` 或 RViz 确认机器人控制器接收到的传感器数据是否准确。
+      * **控制指令**: 使用 `rostopic echo /robot_N/cmd_vel` 检查控制器发布的运动指令是否正确。
+      * **算法逻辑**: 在控制器代码中添加日志输出，逐步调试算法的决策过程。
+      * **参数匹配**: 确保控制器中的参数（例如，避障距离、转弯速度）与仿真环境中机器人的尺寸、速度能力和传感器特性相匹配。
+  * **依赖问题 (尤其是在从源码编译时)** :
+
+    * **症状**: 编译 Stage 或 `stage_ros` 失败，报错缺少库（如 FLTK, libpng, libjpeg）或头文件。
+    * **排查**: 根据错误信息安装缺失的开发库。例如，在 Ubuntu 上，通常是 `sudo apt install libfltk1.3-dev libpng-dev libjpeg-dev` 等。
+
+通过系统地检查这些方面，通常可以定位并解决大部分在使用 Stage 时遇到的问题。
+
+## Chapter 9: 结论
+
+Stage 机器人模拟器，自其在南加州大学诞生以来，作为 Player 项目的重要组成部分，已在机器人研究和教育领域服务多年。它凭借其轻量级、专注于2D多智能体仿真的设计理念，为研究人员提供了一个计算成本低廉且易于使用的平台。Stage 允许用户快速原型化机器人控制算法，并在将其部署到真实硬件之前进行测试和验证，其核心优势在于能够在不过度追求高保真度的情况下，模拟大量设备和复杂的交互场景。
+
+## 附录 A: Stage ROS 项目 Demo
+
+[Hongyi-Zhou/Multi-Robots-Navigation-in-Stage-Ros](https://github.com/Hongyi-Zhou/Multi-Robots-Navigation-in-Stage-Ros)：多机器人导航和避碰的示例。
+
+---
+参考文献：

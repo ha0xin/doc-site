@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json ",
+  "name": "stage",
+  "scopeName": "source.stage",
+  "fileTypes": ["world"],
+  "patterns": [
+    {
+      "begin": "#",
+      "end": "$",
+      "name": "comment.line.number-sign.stage"
+    },
+    {
+      "match": "\\b(include|define)\\b",
+      "name": "keyword.control.stage"
+    },
+    {
+      "match": "\\b(floorplan|position|ranger|laser|blobfinder|bumper|gripper|fiducial)\\b",
+      "name": "constant.other.model-type.stage"
+    },
+    {
+      "match": "\\b(resolution|interval_sim|interval_real|gui_interval)\\b",
+      "name": "variable.language.global-param.stage"
+    },
+    {
+      "match": "\\b(window|size|scale|center|rotate|gui_nose|gui_grid|gui_move|gui_outline)\\b",
+      "name": "support.constant.window-param.stage"
+    },
+    {
+      "match": "\\b(bitmap|map_resolution|boundary|laser_return|gripper_return|fiducial_return)\\b",
+      "name": "entity.other.floorplan-attr.stage"
+    },
+    {
+      "match": "\\b(pose|block|obstacle_return|ranger_return|name|color)\\b",
+      "name": "entity.other.position-attr.stage"
+    },
+    {
+      "match": "\\b(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?\\b",
+      "name": "constant.numeric.float.stage"
+    },
+    {
+      "match": "\\b(0|1)\\b",
+      "name": "constant.language.boolean.stage"
+    },
+    {
+      "match": "\"([^\"]*)\"",
+      "name": "string.quoted.double.include-path.stage"
+    },
+    {
+      "match": "\\[",
+      "name": "punctuation.definition.array.begin.stage"
+    },
+    {
+      "match": "\\]",
+      "name": "punctuation.definition.array.end.stage"
+    },
+    {
+      "match": "\\b(gray\\d+|red|green|blue|black|white)\\b",
+      "name": "constant.other.color.stage"
+    },
+    {
+      "match": "\\b(sensor|range|fov|samples|color_rgba)\\b",
+      "name": "support.constant.sensor-param.stage"
+    }
+  ],
+  "foldingStartMarker": "\\(\\s*$",
+  "foldingStopMarker": "^\\s*\\)"
+}

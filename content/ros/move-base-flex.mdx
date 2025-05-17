@@ -1,0 +1,40 @@
+# Move Base Flex
+
+Move Base Flex (MBF) is an enhanced and highly flexible backwards-compatible replacement for move_base.
+
+## Docs
+
+[move_base_flex - ROS Wiki](https://wiki.ros.org/move_base_flex)
+
+[Official Docs](https://naturerobots.github.io/mbf_docs/)
+
+[Move Base Flex - Robotics Knowledgebase](https://roboticsknowledgebase.com/wiki/planning/move_base_flex/)
+
+## Known Issues
+
+- [#165](https://github.com/naturerobots/move_base_flex/issues/165) - 当使用 `move_base_legacy_relay.py` 时，`controller_frequency` 参数会自动重置为默认值 20。
+
+在使用 `move_base_legacy_relay.py` 兼容层时，某些来自主 MBF 配置的参数可能会被覆盖。应在 `move_base_legacy_relay` 节点参数中再次显式配置受影响的参数，或者不要使用 `move_base_legacy_relay` 兼容层。
+
+以下是受影响的参数列表：
+
+| 参数名称 | 类型 | 默认值 | 描述 |
+|---------|------|--------|------|
+| `planner_frequency` | `double` | 0.0 | 规划循环执行的频率(Hz) |
+| `planner_patience` | `double` | 5.0 | 规划器在尝试寻找有效路径时等待的最长时间(秒) |
+| `planner_max_retries` | `int` | -1 | 在放弃前尝试重新规划以找到有效路径的次数 |
+| `controller_frequency` | `double` | 20.0 | 控制循环运行和发送速度命令到底盘的频率(Hz) |
+| `controller_patience` | `double` | 5.0 | 控制器在未收到有效控制指令后等待的最长时间(秒) |
+| `controller_max_retries` | `int` | -1 | 在放弃前尝试重新调用控制器以找到有效命令的次数 |
+| `recovery_enabled` | `bool` | True | 是否启用move_base_flex恢复行为以尝试清除空间 |
+| `recovery_patience` | `double` | 15.0 | 允许恢复行为完成的最长时间(秒)，超时后取消(或停止) |
+| `oscillation_timeout` | `double` | 0.0 | 在执行恢复行为之前允许振荡的最长时间(秒) |
+| `oscillation_distance` | `double` | 0.5 | 机器人必须移动多远(米)才被视为非振荡状态 |
+
+
+
+```xml
+<node pkg="mbf_costmap_nav" type="move_base_legacy_relay.py" name="move_base_legacy_relay">
+  <param name="controller_frequency" value="10.0" />
+  <!-- 在此处添加其他受影响的参数 -->
+</node>

@@ -1,4 +1,4 @@
-# Stage 模拟器和 stage_ros 
+# Stage 模拟器和 stage_ros
 
 ## Chapter 1: Stage 简介
 
@@ -137,7 +137,7 @@ Stage 仿真环境的内容由一个文本文件定义，通常具有 `.world` �
 
 * **模型定义**: 世界文件主要由一系列模型定义组成。定义模型的基本语法是：
 
-  ```
+  ```stage
   define model_name model_type
   (
     # parameters
@@ -151,7 +151,7 @@ Stage 仿真环境的内容由一个文本文件定义，通常具有 `.world` �
 * **注释**: 以 `#` 符号开头的行被视作注释，会被模拟器忽略。
 * **包含文件**: Stage 支持使用 `include` 指令来包含其他文件的内容，通常是 `.inc` 文件。语法为：
 
-  ```
+  ```stage
   include "filepath/filename.inc"
   ```
 
@@ -264,7 +264,7 @@ Stage 提供了多种传感器模型，允许用户为模拟机器人配备感�
 
 下面是一个简单的 `.world` 文件示例，结合了前面讨论的各种元素，包括全局参数、窗口配置、一个直接定义的 `floorplan` 环境以及一个带 `ranger` 传感器的机器人。
 
-```
+```stage
 # simple_example.world
 
 # 全局世界属性
@@ -477,7 +477,7 @@ add_executable(MyStageApplication main.cpp)
 
 **假设的`.world`文件 (`example.world`):**
 
-```
+```stage
 # example.world
 resolution 0.02
 interval_sim 100
@@ -549,7 +549,7 @@ int main(int argc, char* argv) {
         fprintf(stderr, "Failed to get ranger model 'front_ranger' from robot0\n");
         // 即使没有传感器，机器人仍然可以移动，所以这里不直接退出
     }
-    
+
     // 5. 订阅模型更新 (对于通过 GetModel 获取的模型，通常是自动处理的，
     //    但显式调用 Subscribe 通常无害，并确保其被更新)
     // robot->Subscribe(); // 根据 [8]，这可能是需要的
@@ -587,7 +587,7 @@ int main(int argc, char* argv) {
                 forward_speed = FORWARD_VELOCITY / 2.0; // 慢速前进
                 turn_speed = 0.0;
             }
-            
+
             // 8. 设置机器人速度
             // SetSpeed(前进速度 m/s, 侧向速度 m/s, 转向速度 rad/s)
             robot->SetSpeed(forward_speed, 0.0, turn_speed);
@@ -797,7 +797,7 @@ g++ main.cpp -o libstage_example $(pkg-config --cflags --libs stage)
 这种 `odom` → `base_footprint` → `base_link` → `sensor_frame` 的 TF 树结构是 ROS 导航中非常标准的配置。它允许将传感器数据（例如 `base_laser` 坐标系下的激光扫描）转换到 `base_link` 坐标系，再转换到 `odom` 坐标系，或者最终转换到全局的 `map` 坐标系（如果使用了 SLAM 或定位系统）。
 
 > [!TIP]
-> 
+>
 > 文献中提到了一个关于 `stage_ros` 破坏 REP 105 的问题 (`#35 stage_ros breaks REP 105`)，这表明在某些版本或情况下，TF 的发布可能存在与标准不符或错误的地方。用户在使用时，特别是较旧版本，应留意 TF 树的正确性，并使用 `rosrun tf view_frames` 或 `rqt_tf_tree` 等工具进行检查。
 
 ### 6.8 `stage_ros` 中的多机器人仿真（命名空间）
@@ -1074,14 +1074,14 @@ Stage 的 `.world` 文件格式提供了足够的灵活性来定义各种自定�
 * 使用 `position` 模型作为基础。
 * 通过一个或多个 `block` 定义来构建机器人的物理形状。每个 `block` 都是一个2D多边形（在Z轴上有一定厚度，用于2.5D）。
 
-  ```
+  ```stage
   define my_custom_robot position
   (
     name "custom_bot"
     pose [0 0 0 0]
     size [0.5 0.5 0.3] # 整体包围盒
     color "purple"
-  
+
     # 第一个形状块 (例如，主体)
     block ( points 4 point[-0.2 -0.2] point[0.2 -0.2] point[0.2 0.2] point[-0.2 0.2] z [0 0.2] )
     # 第二个形状块 (例如，一个突出的部分)
@@ -1091,7 +1091,7 @@ Stage 的 `.world` 文件格式提供了足够的灵活性来定义各种自定�
 
 **组合传感器**: 传感器模型（如 `ranger`, `laser`, `blobfinder`, `camera`）通常作为机器人 `position` 模型的子模型进行定义。这意味着它们会附着在机器人上，并相对于机器人的局部坐标系定位。
 
-```
+```stage
 define my_sensor_robot position
 (
   name "sensor_heavy_bot"
